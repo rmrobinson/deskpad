@@ -53,7 +53,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to get serial number: %s\n", err.Error())
 	}
-	log.Printf("using stream deck %s\n", serial)
+	log.Printf("*** Using stream deck '%s'\n", serial)
 
 	err = sd.ClearAllKeys()
 	if err != nil {
@@ -92,8 +92,7 @@ func main() {
 		}
 
 		name := names[0]
-		log.Println("Found media player:", name)
-
+		log.Printf("*** Using MPRIS media player '%s'\n", name)
 		mprisPlayer := mpris.New(conn, name)
 
 		paClient, err := pulseaudio.NewClient()
@@ -103,6 +102,7 @@ func main() {
 		defer paClient.Close()
 
 		paClient.SetDefaultSink(*pulseAudioSinkName)
+		log.Printf("*** Using PulseAudio sink '%s'\n", *pulseAudioSinkName)
 
 		mprisMP := service.NewLinuxMediaPlayer(mprisPlayer, paClient)
 		mediaPlayer = mprisMP
