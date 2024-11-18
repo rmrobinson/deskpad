@@ -89,7 +89,7 @@ func (mpss *MediaPlayerSettingScreen) Show() []image.Image {
 
 // RefreshDevices refreshes the set of devices this screen can display
 func (mpss *MediaPlayerSettingScreen) RefreshDevices(ctx context.Context) {
-	mpss.devices = mpss.mpsc.GetDevices(ctx)
+	mpss.devices = mpss.mpsc.GetAudioOutputs(ctx)
 	log.Printf("got %d devices\n", len(mpss.devices))
 }
 

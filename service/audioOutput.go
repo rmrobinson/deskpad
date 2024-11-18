@@ -14,8 +14,12 @@ const (
 
 // AudioOutput represents a controllable audio output device.
 type AudioOutput struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	Description string
+
+	Volume int
+	Muted  bool
 
 	Active bool
 	Type   AudioOutputType
