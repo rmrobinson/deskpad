@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/lawl/pulseaudio"
@@ -119,4 +120,51 @@ func (m *LinuxMediaPlayer) IsMuted() bool {
 func (m *LinuxMediaPlayer) StartPlaylist(ctx context.Context, id string) {
 	log.Printf("playing URI: %s\n", id)
 	m.mprisClient.OpenUri(id)
+}
+
+func (m *LinuxMediaPlayer) CurrentlyPlaying(ctx context.Context) *MediaItem {
+	if !m.IsPlaying() {
+		return nil
+	}
+
+	metadata := m.mprisClient.GetMetadata()
+
+	var artists []string
+	for _, artist := range metadata["xesam:artist"].Value().([]string) {
+		artists = append(artists, artist)
+	}
+	return &MediaItem{
+		ID:           metadata["xesam:url"].Value().(string),
+		Title:        metadata["xesam:title"].Value().(string),
+		Artists:      artists,
+		AlbumName:    metadata["xesam:album"].Value().(string),
+		AlburmArtURL: metadata["mpris:artUrl"].Value().(string),
+	}
+}
+
+func (m *LinuxMediaPlayer) GetAudioOutputs(ctx context.Context) []AudioOutput {
+	sinks, err := m.paClient.Sinks()
+	if err != nil {
+		log.Printf("unable to get pulseaudio sinks: %s\n", err.Error())
+		return []AudioOutput{}
+	}
+
+	var ret []AudioOutput
+	for _, sink := range sinks {
+		// State 0: active
+		// State 2: suspended
+		ret = append(ret, AudioOutput{
+			ID:          fmt.Sprintf("%d", sink.Index),
+			Name:        sink.Name,
+			Description: sink.Description,
+			Muted:       sink.Muted,
+			Active:      sink.SinkState == 0,
+		})
+	}
+
+	return ret
+}
+func (m *LinuxMediaPlayer) PlayOnDevice(_ context.Context, deviceID string) {
+	// Set the default sink in PulseAudio
+	m.paClient.SetDefaultSink(deviceID)
 }

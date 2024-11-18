@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
@@ -19,8 +20,7 @@ import (
 )
 
 var (
-	useMPRIS           = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
-	pulseAudioSinkName = flag.String("pa-sink", "", "The name of the PulseAudio sink to use")
+	useMPRIS = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
 )
 
 func configureSpotifyClient(ctx context.Context) *spotify.Client {
@@ -75,6 +75,7 @@ func main() {
 	}
 
 	var mediaPlayer service.MediaPlayerController
+	var mediaPlayerSettings service.MediaPlayerSettingController
 
 	if *useMPRIS {
 		conn, err := dbus.SessionBus()
@@ -101,13 +102,12 @@ func main() {
 		}
 		defer paClient.Close()
 
-		paClient.SetDefaultSink(*pulseAudioSinkName)
-		log.Printf("*** Using PulseAudio sink '%s'\n", *pulseAudioSinkName)
-
-		mprisMP := service.NewLinuxMediaPlayer(mprisPlayer, paClient)
-		mediaPlayer = mprisMP
+		linuxMP := service.NewLinuxMediaPlayer(mprisPlayer, paClient)
+		mediaPlayer = linuxMP
+		mediaPlayerSettings = linuxMP
 	} else {
 		mediaPlayer = spotifyMP
+		mediaPlayerSettings = spotifyMP
 	}
 
 	// Keep the Spotify playlists fresh
@@ -123,10 +123,24 @@ func main() {
 		}
 	}()
 
+	// Set up the API
+	go func() {
+		api := &API{
+			mpc:  mediaPlayer,
+			mpsc: mediaPlayerSettings,
+		}
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/status", api.Status)
+
+		log.Printf("starting http api\n")
+		http.ListenAndServe(":1337", mux)
+	}()
+
 	// Set up the UI
 	mps := ui.NewMediaPlayerScreen(mediaPlayer)
 
-	mpss := ui.NewMediaPlayerSettingScreen(spotifyMP)
+	mpss := ui.NewMediaPlayerSettingScreen(mediaPlayerSettings)
 	mpss.RefreshDevices(ctx)
 
 	mpls := ui.NewMediaPlaylistScreen(spotifyMP, mediaPlayer)

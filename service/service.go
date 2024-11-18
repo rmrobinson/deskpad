@@ -23,11 +23,12 @@ type MediaPlayerController interface {
 	IsMuted() bool
 
 	StartPlaylist(ctx context.Context, id string)
+	CurrentlyPlaying(ctx context.Context) *MediaItem
 }
 
 // MediaPlayerSettingController describes the functions which this screen will use to interact with the player setting source.
 type MediaPlayerSettingController interface {
-	GetDevices(ctx context.Context) []AudioOutput
+	GetAudioOutputs(ctx context.Context) []AudioOutput
 	PlayOnDevice(ctx context.Context, deviceID string)
 }
 

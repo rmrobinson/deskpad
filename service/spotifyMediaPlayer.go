@@ -205,6 +205,29 @@ func (mp *SpotifyMediaPlayer) StartPlaylist(ctx context.Context, id string) {
 	mp.isPlaying = true
 }
 
+func (mp *SpotifyMediaPlayer) CurrentlyPlaying(ctx context.Context) *MediaItem {
+	state, err := mp.client.PlayerState(ctx)
+	if err != nil {
+		log.Printf("error getting currently playing: %s\n", err.Error())
+		return nil
+	}
+
+	if state.CurrentlyPlaying.Item != nil {
+		var artists []string
+		for _, artist := range state.CurrentlyPlaying.Item.Artists {
+			artists = append(artists, artist.Name)
+		}
+		return &MediaItem{
+			ID:        string(state.CurrentlyPlaying.Item.ID),
+			Title:     state.CurrentlyPlaying.Item.Name,
+			Artists:   artists,
+			AlbumName: state.CurrentlyPlaying.Item.Album.Name,
+		}
+	}
+
+	return nil
+}
+
 func (mp *SpotifyMediaPlayer) GetPlaylists(count int, offset int) []MediaPlaylist {
 	startIdx := offset
 	if startIdx > len(mp.cachedPlaylists) {
@@ -257,7 +280,7 @@ func (mp *SpotifyMediaPlayer) RefreshPlaylists(ctx context.Context) error {
 	return nil
 }
 
-func (mp *SpotifyMediaPlayer) GetDevices(ctx context.Context) []AudioOutput {
+func (mp *SpotifyMediaPlayer) GetAudioOutputs(ctx context.Context) []AudioOutput {
 	mediaDevices := []AudioOutput{}
 
 	devices, err := mp.client.PlayerDevices(ctx)
