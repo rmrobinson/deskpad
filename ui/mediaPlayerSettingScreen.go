@@ -24,38 +24,41 @@ type MediaPlayerSettingScreen struct {
 
 	devices []service.AudioOutput
 
-	keys []image.Image
+	iconImg image.Image
+	keys    []image.Image
 }
 
 // MediaPlayerSettingScreen creates a new instance of the media player setting screen, configured with the provided setting controller.
-func NewMediaPlayerSettingScreen(mpsc service.MediaPlayerSettingController) *MediaPlayerSettingScreen {
+func NewMediaPlayerSettingScreen(homeScreen *HomeScreen, mpsc service.MediaPlayerSettingController) *MediaPlayerSettingScreen {
 	// Currently setup for a StreamDeck with 15 buttons
 	mpss := &MediaPlayerSettingScreen{
-		mpsc:    mpsc,
-		devices: []service.AudioOutput{},
-		keys:    make([]image.Image, 15),
+		mpsc:       mpsc,
+		homeScreen: homeScreen,
+		devices:    []service.AudioOutput{},
+		iconImg:    loadAssetImage("assets/settings-3-fill.png"),
+		keys:       make([]image.Image, 15),
 	}
 
-	mpss.keys[mediaPlayerSettingHomeKeyID] = loadAssetImage("assets/home-3-fill.png")
-	mpss.keys[mediaPlayerSettingPlayerKeyID] = loadAssetImage("assets/music-2-fill.png")
+	mpss.keys[mediaPlayerSettingHomeKeyID] = homeScreen.Icon()
 	mpss.keys[mediaPlayerSettingRefreshKeyID] = loadAssetImage("assets/refresh-fill.png")
 
 	return mpss
 }
 
-// SetHomeScreen configures the screen navigated to when the 'Home' button is pressed
-func (mpss *MediaPlayerSettingScreen) SetHomeScreen(screen deskpad.Screen) {
-	mpss.homeScreen = screen
-}
-
 // SetPlayerScreen configures the screen navigated to when the 'Player' button is pressed
 func (mpss *MediaPlayerSettingScreen) SetPlayerScreen(screen deskpad.Screen) {
 	mpss.playerScreen = screen
+	mpss.keys[mediaPlayerSettingPlayerKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media player setting"
 func (mpss *MediaPlayerSettingScreen) Name() string {
 	return "media player setting"
+}
+
+// Icon returns the icon to display for this screen
+func (mpss *MediaPlayerSettingScreen) Icon() image.Image {
+	return mpss.iconImg
 }
 
 // Show returns the image set which will be shown to the user.

@@ -24,6 +24,8 @@ type MediaPlaylistScreen struct {
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
+	iconImg image.Image
+
 	playlists          []service.MediaPlaylist
 	currPlaylistOffset int
 
@@ -31,36 +33,40 @@ type MediaPlaylistScreen struct {
 }
 
 // NewMediaPlaylistScreen creates a new instance of the playlist screen, configured with the provided playlist controller.
-func NewMediaPlaylistScreen(mpc service.MediaPlaylistController, mplayc service.MediaPlayerController) *MediaPlaylistScreen {
+func NewMediaPlaylistScreen(homeScreen *HomeScreen, mpc service.MediaPlaylistController, mplayc service.MediaPlayerController) *MediaPlaylistScreen {
 	// Currently setup for a StreamDeck with 15 buttons
 	mps := &MediaPlaylistScreen{
 		mpc:                mpc,
 		mplayc:             mplayc,
+		homeScreen:         homeScreen,
+		iconImg:            loadAssetImage("assets/folder-music-fill.png"),
 		playlists:          []service.MediaPlaylist{},
 		currPlaylistOffset: 0,
 		keys:               make([]image.Image, 15),
 	}
 
-	mps.keys[mediaPlaylistHomeKeyID] = loadAssetImage("assets/home-3-fill.png")
-	mps.keys[mediaPlaylistPlayerKeyID] = loadAssetImage("assets/music-2-fill.png")
+	mps.keys[mediaPlaylistHomeKeyID] = homeScreen.Icon()
 	mps.keys[mediaPlaylistNextKeyID] = loadAssetImage("assets/skip-right-line.png")
 
-	return mps
-}
+	homeScreen.RegisterScreen(mps)
 
-// SetHomeScreen configures the screen navigated to when the 'Home' button is pressed
-func (mps *MediaPlaylistScreen) SetHomeScreen(screen deskpad.Screen) {
-	mps.homeScreen = screen
+	return mps
 }
 
 // SetPlayerScreen configures the screen navigated to when the 'Player' button is pressed
 func (mps *MediaPlaylistScreen) SetPlayerScreen(screen deskpad.Screen) {
 	mps.playerScreen = screen
+	mps.keys[mediaPlaylistPlayerKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media playlist"
 func (mps *MediaPlaylistScreen) Name() string {
 	return "media playlist"
+}
+
+// Icon returns the icon to display for this screen
+func (mps *MediaPlaylistScreen) Icon() image.Image {
+	return mps.iconImg
 }
 
 // Show returns the image set which will be shown to the user.

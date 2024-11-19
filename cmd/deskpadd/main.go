@@ -168,28 +168,22 @@ func main() {
 	}
 
 	// Set up the UI
-	mps := ui.NewMediaPlayerScreen(mediaPlayer)
+	hs := ui.NewHomeScreen(tbc)
 
-	mpss := ui.NewMediaPlayerSettingScreen(mediaPlayerSettings)
-	mpss.RefreshDevices(ctx)
+	mps := ui.NewMediaPlayerScreen(hs, mediaPlayer)
 
-	mpls := ui.NewMediaPlaylistScreen(spotifyMP, mediaPlayer)
-
-	sbs := ui.NewScoreboardScreen(tbc)
-
-	hs := ui.NewHomeScreen(mps, mpls, sbs, tbc)
-
-	mpss.SetHomeScreen(hs)
+	mpss := ui.NewMediaPlayerSettingScreen(hs, mediaPlayerSettings)
 	mpss.SetPlayerScreen(mps)
-
-	mps.SetHomeScreen(hs)
-	mps.SetPlaylistScreen(mpls)
+	mpss.RefreshDevices(ctx)
 	mps.SetSettingsScreen(mpss)
 
-	mpls.SetHomeScreen(hs)
+	mpls := ui.NewMediaPlaylistScreen(hs, spotifyMP, mediaPlayer)
 	mpls.SetPlayerScreen(mps)
+	mps.SetPlaylistScreen(mpls)
 
-	sbs.SetHomeScreen(hs)
+	if tbc != nil {
+		_ = ui.NewScoreboardScreen(hs, tbc)
+	}
 
 	d := deskpad.NewDeck(sd, hs)
 	d.Run(ctx)

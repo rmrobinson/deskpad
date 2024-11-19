@@ -10,41 +10,32 @@ import (
 )
 
 const (
-	homePlayerScreenID     = 0
-	homePlaylistScreenID   = 1
-	homeClockID            = 2
-	homeTempID             = 3
-	homeScoreboardScreenID = 4
+	homeClockID = 0
+	homeTempID  = 1
 )
 
 // HomeScreen is the first screen shown to the user, listing all othe other possible screens
 type HomeScreen struct {
-	playerScreen     deskpad.Screen
-	playlistScreen   deskpad.Screen
-	scoreboardScreen deskpad.Screen
+	screens []deskpad.Screen
+	keys    []image.Image
 
-	tbc  *timebox.Conn
-	keys []image.Image
+	iconImg image.Image
+	tbc     *timebox.Conn
 }
 
 // NewHomeSCreen creates a home screen which allows navigation to the supplied screens.
-func NewHomeScreen(player, playlist, scoreboard deskpad.Screen, tbc *timebox.Conn) *HomeScreen {
+func NewHomeScreen(tbc *timebox.Conn) *HomeScreen {
 	// Currently setup for a StreamDeck with 15 buttons
 	hs := &HomeScreen{
-		playerScreen:     player,
-		playlistScreen:   playlist,
-		scoreboardScreen: scoreboard,
-		tbc:              tbc,
-		keys:             make([]image.Image, 15),
+		screens: make([]deskpad.Screen, 15),
+		keys:    make([]image.Image, 15),
+		iconImg: loadAssetImage("assets/home-3-fill.png"),
+		tbc:     tbc,
 	}
-
-	hs.keys[homePlayerScreenID] = loadAssetImage("assets/music-2-fill.png")
-	hs.keys[homePlaylistScreenID] = loadAssetImage("assets/folder-music-fill.png")
 
 	if tbc != nil {
 		hs.keys[homeClockID] = loadAssetImage("assets/time-line.png")
 		hs.keys[homeTempID] = loadAssetImage("assets/temp-cold-line.png")
-		hs.keys[homeScoreboardScreenID] = loadAssetImage("assets/group-3-line.png")
 	}
 
 	return hs
@@ -60,30 +51,46 @@ func (hs *HomeScreen) Show() []image.Image {
 	return hs.keys
 }
 
+// Icon returns the icon to display for this screen
+func (hs *HomeScreen) Icon() image.Image {
+	return hs.iconImg
+}
+
+// RegisterScreen adds a screen to the Home view in the next available spot
+func (hs *HomeScreen) RegisterScreen(s deskpad.Screen) {
+	for i, cs := range hs.screens {
+		if cs == nil {
+			hs.screens[i] = s
+			hs.keys[i] = s.Icon()
+			return
+		}
+	}
+}
+
 // KeyPressed handles the logic of what to do when a given key is pressed.
 func (hs *HomeScreen) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
 	if t == deskpad.KeyPressLong {
 		log.Print("got a long key press!\n")
 	}
 
-	if id == homePlayerScreenID {
-		return deskpad.KeyPressAction{
-			Action:    deskpad.KeyPressActionChangeScreen,
-			NewScreen: hs.playerScreen,
-		}, nil
-	} else if id == homePlaylistScreenID {
-		return deskpad.KeyPressAction{
-			Action:    deskpad.KeyPressActionChangeScreen,
-			NewScreen: hs.playlistScreen,
-		}, nil
-	} else if id == homeClockID && hs.tbc != nil {
+	if id == homeClockID && hs.tbc != nil {
 		hs.tbc.DisplayClock(true)
+
+		return deskpad.KeyPressAction{
+			Action: deskpad.KeyPressActionNoop,
+		}, nil
 	} else if id == homeTempID && hs.tbc != nil {
 		hs.tbc.DisplayTemperature(true)
-	} else if id == homeScoreboardScreenID {
+
+		return deskpad.KeyPressAction{
+			Action: deskpad.KeyPressActionNoop,
+		}, nil
+	}
+
+	if s := hs.screens[id]; s != nil {
 		return deskpad.KeyPressAction{
 			Action:    deskpad.KeyPressActionChangeScreen,
-			NewScreen: hs.scoreboardScreen,
+			NewScreen: s,
 		}, nil
 	}
 

@@ -33,6 +33,7 @@ type MediaPlayerScreen struct {
 	playlistScreen deskpad.Screen
 	settingsScreen deskpad.Screen
 
+	iconImg    image.Image
 	playImg    image.Image
 	pauseImg   image.Image
 	shuffleImg image.Image
@@ -42,10 +43,12 @@ type MediaPlayerScreen struct {
 }
 
 // NewMediaPlayerScreen creates a new screen for handling music playback, configured with the provided media player controller.
-func NewMediaPlayerScreen(mpc service.MediaPlayerController) *MediaPlayerScreen {
+func NewMediaPlayerScreen(homeScreen *HomeScreen, mpc service.MediaPlayerController) *MediaPlayerScreen {
 	// Currently setup for a StreamDeck with 15 buttons
 	mps := &MediaPlayerScreen{
 		mpc:        mpc,
+		homeScreen: homeScreen,
+		iconImg:    loadAssetImage("assets/music-2-fill.png"),
 		playImg:    loadAssetImage("assets/play-fill.png"),
 		pauseImg:   loadAssetImage("assets/pause-fill.png"),
 		shuffleImg: loadAssetImage("assets/shuffle-fill.png"),
@@ -53,40 +56,40 @@ func NewMediaPlayerScreen(mpc service.MediaPlayerController) *MediaPlayerScreen 
 		keys:       make([]image.Image, 15),
 	}
 
+	mps.keys[mediaPlayerHomeKeyID] = homeScreen.Icon()
 	mps.keys[mediaPlayerPrevKeyID] = loadAssetImage("assets/skip-back-fill.png")
 	mps.keys[mediaPlayerNextKeyID] = loadAssetImage("assets/skip-forward-fill.png")
-	mps.keys[mediaPlayerHomeKeyID] = loadAssetImage("assets/home-3-fill.png")
-
 	mps.keys[mediaPlayerRewindKeyID] = loadAssetImage("assets/replay-10-fill.png")
 	mps.keys[mediaPlayerFastForwardKeyID] = loadAssetImage("assets/forward-10-fill.png")
-	mps.keys[mediaPlayerPlaylistKeyID] = loadAssetImage("assets/folder-music-fill.png")
-
 	mps.keys[mediaPlayerVolDownKeyID] = loadAssetImage("assets/volume-down-fill.png")
 	mps.keys[mediaPlayerVolMuteKeyID] = loadAssetImage("assets/volume-mute-fill.png")
 	mps.keys[mediaPlayerVolUpKeyID] = loadAssetImage("assets/volume-up-fill.png")
-	mps.keys[mediaPlayerSettingsKeyID] = loadAssetImage("assets/settings-3-fill.png")
+
+	homeScreen.RegisterScreen(mps)
 
 	return mps
-}
-
-// SetHomeScreen configures the screen navigated to when the 'Home' button is pressed
-func (mps *MediaPlayerScreen) SetHomeScreen(screen deskpad.Screen) {
-	mps.homeScreen = screen
 }
 
 // SetPlaylistScreen configures the screen navigated to when the 'Playlist' button is pressed
 func (mps *MediaPlayerScreen) SetPlaylistScreen(screen deskpad.Screen) {
 	mps.playlistScreen = screen
+	mps.keys[mediaPlayerPlaylistKeyID] = screen.Icon()
 }
 
 // SetSettingsScreen configures the screen navigated to when the 'Settings' button is pressed
 func (mps *MediaPlayerScreen) SetSettingsScreen(screen deskpad.Screen) {
 	mps.settingsScreen = screen
+	mps.keys[mediaPlayerSettingsKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media player"
 func (mps *MediaPlayerScreen) Name() string {
 	return "media player"
+}
+
+// Icon returns the icon to display for this screen
+func (mps *MediaPlayerScreen) Icon() image.Image {
+	return mps.iconImg
 }
 
 // Show returns the image set which will be shown to the user.
@@ -180,7 +183,7 @@ func (mps *MediaPlayerScreen) KeyPressed(ctx context.Context, id int, t deskpad.
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
-	} else if id == mediaPlayerSettingsKeyID {
+	} else if id == mediaPlayerSettingsKeyID && mps.settingsScreen != nil {
 		return deskpad.KeyPressAction{
 			Action:    deskpad.KeyPressActionChangeScreen,
 			NewScreen: mps.settingsScreen,
@@ -190,7 +193,7 @@ func (mps *MediaPlayerScreen) KeyPressed(ctx context.Context, id int, t deskpad.
 			Action:    deskpad.KeyPressActionChangeScreen,
 			NewScreen: mps.homeScreen,
 		}, nil
-	} else if id == mediaPlayerPlaylistKeyID {
+	} else if id == mediaPlayerPlaylistKeyID && mps.playlistScreen != nil {
 		return deskpad.KeyPressAction{
 			Action:    deskpad.KeyPressActionChangeScreen,
 			NewScreen: mps.playlistScreen,

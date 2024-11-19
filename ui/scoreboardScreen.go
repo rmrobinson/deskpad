@@ -21,6 +21,7 @@ const (
 // ScoreboardScreen displays the buttons for a 2 person scorekeeping system via a Timebox unit
 type ScoreboardScreen struct {
 	homeScreen deskpad.Screen
+	iconImg    image.Image
 
 	redScore  int
 	blueScore int
@@ -30,14 +31,16 @@ type ScoreboardScreen struct {
 }
 
 // NewScoreboardScreen creates a new instance of the scoreboardscreen. Game starts at 0
-func NewScoreboardScreen(tbc *timebox.Conn) *ScoreboardScreen {
+func NewScoreboardScreen(homeScreen *HomeScreen, tbc *timebox.Conn) *ScoreboardScreen {
 	// Currently setup for a StreamDeck with 15 buttons
 	sbs := &ScoreboardScreen{
-		tbc:  tbc,
-		keys: make([]image.Image, 15),
+		homeScreen: homeScreen,
+		iconImg:    loadAssetImage("assets/group-3-line.png"),
+		tbc:        tbc,
+		keys:       make([]image.Image, 15),
 	}
 
-	sbs.keys[scoreboardHomeKeyID] = loadAssetImage("assets/home-3-fill.png")
+	sbs.keys[scoreboardHomeKeyID] = homeScreen.Icon()
 	sbs.keys[scoreboardRedPlusKeyID] = loadAssetImage("assets/add-line.png")
 	sbs.keys[scoreboardRedIconKeyID] = loadAssetImage("assets/scoreboard-red.png")
 	sbs.keys[scoreboardRedMinusKeyID] = loadAssetImage("assets/subtract-line.png")
@@ -45,17 +48,19 @@ func NewScoreboardScreen(tbc *timebox.Conn) *ScoreboardScreen {
 	sbs.keys[scoreboardBlueIconKeyID] = loadAssetImage("assets/scoreboard-blue.png")
 	sbs.keys[scoreboardBlueMinusKeyID] = loadAssetImage("assets/subtract-line.png")
 
-	return sbs
-}
+	homeScreen.RegisterScreen(sbs)
 
-// SetHomeScreen configures the screen navigated to when the 'Home' button is pressed
-func (sbs *ScoreboardScreen) SetHomeScreen(screen deskpad.Screen) {
-	sbs.homeScreen = screen
+	return sbs
 }
 
 // Name is hardcoded to display as "scoreboard"
 func (sbs *ScoreboardScreen) Name() string {
 	return "scoreboard"
+}
+
+// Icon returns the icon to display for this screen
+func (sbs *ScoreboardScreen) Icon() image.Image {
+	return sbs.iconImg
 }
 
 // Show returns the image set which will be shown to the user.
