@@ -40,9 +40,12 @@ func NewHomeScreen(player, playlist, scoreboard deskpad.Screen, tbc *timebox.Con
 
 	hs.keys[homePlayerScreenID] = loadAssetImage("assets/music-2-fill.png")
 	hs.keys[homePlaylistScreenID] = loadAssetImage("assets/folder-music-fill.png")
-	hs.keys[homeClockID] = loadAssetImage("assets/time-line.png")
-	hs.keys[homeTempID] = loadAssetImage("assets/temp-cold-line.png")
-	hs.keys[homeScoreboardScreenID] = loadAssetImage("assets/group-3-line.png")
+
+	if tbc != nil {
+		hs.keys[homeClockID] = loadAssetImage("assets/time-line.png")
+		hs.keys[homeTempID] = loadAssetImage("assets/temp-cold-line.png")
+		hs.keys[homeScoreboardScreenID] = loadAssetImage("assets/group-3-line.png")
+	}
 
 	return hs
 }
