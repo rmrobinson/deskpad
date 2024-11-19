@@ -16,11 +16,14 @@ import (
 	"github.com/rmrobinson/deskpad/service"
 	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/go-mpris"
+	"github.com/rmrobinson/timebox"
+	bt "github.com/rmrobinson/timebox/bluetooth"
 	"github.com/zmb3/spotify/v2"
 )
 
 var (
-	useMPRIS = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
+	useMPRIS    = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
+	timeboxAddr = flag.String("timebox-addr", "", "The Bluetooth address of the Timebox to control")
 )
 
 func configureSpotifyClient(ctx context.Context) *spotify.Client {
@@ -137,6 +140,33 @@ func main() {
 		http.ListenAndServe(":1337", mux)
 	}()
 
+	var tbc *timebox.Conn
+	// Setup Timebox, if configured
+	if len(*timeboxAddr) > 0 {
+		btAddr, err := bt.NewAddress(*timeboxAddr)
+		if err != nil {
+			log.Fatalf("invalid bluetooth address (%s): %s\n", *timeboxAddr, err)
+		}
+
+		btConn := &bt.Connection{}
+		err = btConn.Connect(btAddr, 4)
+		if err != nil {
+			log.Fatalf("unable to connect to bluetooth device: %s\n", err.Error())
+		}
+		defer btConn.Close()
+
+		tbConn := timebox.NewConn(btConn)
+		if err := tbConn.Initialize(); err != nil {
+			log.Fatalf("unable to establish connection with timebox: %s\n", err.Error())
+		}
+
+		tbConn.SetColor(&timebox.Colour{R: 0, G: 255, B: 66})
+
+		tbConn.SetBrightness(100)
+		tbConn.SetTime(time.Now())
+		tbc = tbConn
+	}
+
 	// Set up the UI
 	mps := ui.NewMediaPlayerScreen(mediaPlayer)
 
@@ -145,7 +175,9 @@ func main() {
 
 	mpls := ui.NewMediaPlaylistScreen(spotifyMP, mediaPlayer)
 
-	hs := ui.NewHomeScreen(mps, mpls)
+	sbs := ui.NewScoreboardScreen(tbc)
+
+	hs := ui.NewHomeScreen(mps, mpls, sbs, tbc)
 
 	mpss.SetHomeScreen(hs)
 	mpss.SetPlayerScreen(mps)
@@ -156,6 +188,8 @@ func main() {
 
 	mpls.SetHomeScreen(hs)
 	mpls.SetPlayerScreen(mps)
+
+	sbs.SetHomeScreen(hs)
 
 	d := deskpad.NewDeck(sd, hs)
 	d.Run(ctx)
