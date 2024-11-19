@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lawl/pulseaudio v0.0.0-20220626105240-976bed5e247c
 	github.com/rmrobinson/go-mpris v0.0.1
+	github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae
 	github.com/zmb3/spotify/v2 v2.4.2
 	golang.org/x/image v0.21.0
 	golang.org/x/oauth2 v0.0.0-20210810183815-faf39c7919d5

@@ -129,6 +129,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/rmrobinson/go-mpris v0.0.1 h1:Bnk/EW6jRGfk8iR6QVtwsOUj0rcMCG78OY73MaKcWzs=
 github.com/rmrobinson/go-mpris v0.0.1/go.mod h1:4l8plrVe4U6v0hSMy+2Gk6gzcI1pTHTztKHeoqiJAT0=
+github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae h1:19qomZyBlT5AVEtXLqh4+M+M96DlrpjfVJsp2iX+PvI=
+github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae/go.mod h1:297Cr3UKQyqoyc2cn1U2X0KF/qkXdCq9GyUYYGwtBP8=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/sstallion/go-hid v0.14.1 h1:shbZlKqv5fr1KnxwqtLEPGkOoA6OSUWTx9TblegATvc=
 github.com/sstallion/go-hid v0.14.1/go.mod h1:fPKp4rqx0xuoTV94gwKojsPG++KNKhxuU88goGuGM7I=

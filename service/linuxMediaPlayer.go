@@ -155,8 +155,8 @@ func (m *LinuxMediaPlayer) GetAudioOutputs(ctx context.Context) []AudioOutput {
 		// State 2: suspended
 		ret = append(ret, AudioOutput{
 			ID:          fmt.Sprintf("%d", sink.Index),
-			Name:        sink.Name,
-			Description: sink.Description,
+			Name:        sink.Description,
+			Description: sink.Name,
 			Muted:       sink.Muted,
 			Active:      sink.SinkState == 0,
 		})
