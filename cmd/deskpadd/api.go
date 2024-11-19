@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/rmrobinson/deskpad"
 	"github.com/rmrobinson/deskpad/service"
 )
 
@@ -32,12 +33,19 @@ type StatusResponse struct {
 		State            string     `json:"state"`
 		CurrentlyPlaying *MediaItem `json:"currentlyPlaying"`
 	}
+	UI struct {
+		CurrentScreen struct {
+			Name string `json:"name"`
+		} `json:"currentScreen"`
+	} `json:"ui"`
 	// TODO: add playlists
 }
 
 type API struct {
 	mpc  service.MediaPlayerController
 	mpsc service.MediaPlayerSettingController
+
+	d *deskpad.Deck
 }
 
 func (a *API) Status(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +57,8 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		resp := &StatusResponse{}
+
+		resp.UI.CurrentScreen.Name = a.d.Screen().Name()
 
 		isPlaying := a.mpc.IsPlaying()
 		if isPlaying {

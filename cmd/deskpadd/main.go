@@ -126,20 +126,6 @@ func main() {
 		}
 	}()
 
-	// Set up the API
-	go func() {
-		api := &API{
-			mpc:  mediaPlayer,
-			mpsc: mediaPlayerSettings,
-		}
-
-		mux := http.NewServeMux()
-		mux.HandleFunc("/status", api.Status)
-
-		log.Printf("starting http api\n")
-		http.ListenAndServe(":1337", mux)
-	}()
-
 	var tbc *timebox.Conn
 	// Setup Timebox, if configured
 	if len(*timeboxAddr) > 0 {
@@ -186,5 +172,21 @@ func main() {
 	}
 
 	d := deskpad.NewDeck(sd, hs)
+
+	// Set up the API
+	go func() {
+		api := &API{
+			mpc:  mediaPlayer,
+			mpsc: mediaPlayerSettings,
+			d:    d,
+		}
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/status", api.Status)
+
+		log.Printf("starting http api\n")
+		http.ListenAndServe(":1337", mux)
+	}()
+
 	d.Run(ctx)
 }
