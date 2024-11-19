@@ -34,7 +34,9 @@ func NewHomeScreen(tbc *timebox.Conn) *HomeScreen {
 	}
 
 	if tbc != nil {
+		hs.screens[homeClockID] = hs
 		hs.keys[homeClockID] = loadAssetImage("assets/time-line.png")
+		hs.screens[homeTempID] = hs
 		hs.keys[homeTempID] = loadAssetImage("assets/temp-cold-line.png")
 	}
 
