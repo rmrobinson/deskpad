@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"net/http"
 	"os/signal"
@@ -19,17 +18,10 @@ import (
 	"github.com/rmrobinson/timebox"
 	bt "github.com/rmrobinson/timebox/bluetooth"
 	"github.com/rmrobinson/weather"
+	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-)
-
-var (
-	useMPRIS    = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
-	timeboxAddr = flag.String("timebox-addr", "", "The Bluetooth address of the Timebox to control")
-	weatherAddr = flag.String("weather-addr", "", "The address of the weather service to use")
-	weatherLat  = flag.Float64("weather-lat", 0, "The latitude to specify when querying for weather")
-	weatherLon  = flag.Float64("weather-lon", 0, "The longitude to specify when querying for weather")
 )
 
 func configureSpotifyClient(ctx context.Context) *spotify.Client {
@@ -40,7 +32,7 @@ func configureSpotifyClient(ctx context.Context) *spotify.Client {
 
 	user, err := spc.CurrentUser(ctx)
 	if err != nil {
-		log.Fatalf("unable to get spotify current user: %s\n", err.Error())
+		log.Fatalf("unable to get spotify current user:%w\n", err)
 	}
 
 	log.Printf("spotify user %s\n", user.ID)
@@ -48,25 +40,33 @@ func configureSpotifyClient(ctx context.Context) *spotify.Client {
 }
 
 func main() {
-	flag.Parse()
+	viper.SetConfigName("deskpad")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("$HOME/.deskpad")
+	viper.AddConfigPath(".")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Fatalf("unable to load config file: %w\n", err)
+	}
 
 	// Detect and initialize the Stream Deck
 	// No point in continuing if we can't find the right hardware to use.
 	sd, err := sdeck.New(sdeck.StreamDeckOriginalV2)
 	if err != nil {
-		log.Fatalf("unable to initialize stream deck: %s\n", err.Error())
+		log.Fatalf("unable to initialize stream deck: %w\n", err)
 	}
 	defer sd.Close()
 
 	serial, err := sd.Serial()
 	if err != nil {
-		log.Fatalf("unable to get serial number: %s\n", err.Error())
+		log.Fatalf("unable to get serial number: %w\n", err)
 	}
 	log.Printf("*** Using stream deck '%s'\n", serial)
 
 	err = sd.ClearAllKeys()
 	if err != nil {
-		log.Fatalf("error resetting deck - consider unplugging & replugging the stream deck. Details: %s\n", err.Error())
+		log.Fatalf("error resetting deck - consider unplugging & replugging the stream deck. Details: %w\n", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
@@ -79,7 +79,7 @@ func main() {
 	var mprisClient *mpris.Player
 	var pulseAudioClient *pulseaudio.Client
 	// Setup MPRIS & PulseAudio, if configured
-	if *useMPRIS {
+	if viper.GetBool("use-mpris") {
 		conn, err := dbus.SessionBus()
 		if err != nil {
 			panic(err)
@@ -100,57 +100,74 @@ func main() {
 
 		paClient, err := pulseaudio.NewClient()
 		if err != nil {
-			log.Fatalf("error connecting to pulseaudio: %s\n", err.Error())
+			log.Fatalf("error connecting to pulseaudio: %w\n", err)
 		}
 		defer paClient.Close()
 
 		pulseAudioClient = paClient
 	}
 
-	var tbc *timebox.Conn
 	// Setup Timebox, if configured
-	if len(*timeboxAddr) > 0 {
-		btAddr, err := bt.NewAddress(*timeboxAddr)
+	tbAddr := viper.GetString("timebox.addr")
+	var tbc *timebox.Conn
+	if len(tbAddr) > 0 {
+		viper.SetDefault("timebox.color.red", 0)
+		viper.SetDefault("timebox.color.green", 255)
+		viper.SetDefault("timebox.color.blue", 66)
+
+		btAddr, err := bt.NewAddress(tbAddr)
 		if err != nil {
-			log.Fatalf("invalid bluetooth address (%s): %s\n", *timeboxAddr, err)
+			log.Fatalf("invalid bluetooth address (%s): %w\n", tbAddr, err)
 		}
 
 		btConn := &bt.Connection{}
 		err = btConn.Connect(btAddr, 4)
 		if err != nil {
-			log.Fatalf("unable to connect to bluetooth device: %s\n", err.Error())
+			log.Fatalf("unable to connect to bluetooth device: %w\n", err)
 		}
 		defer btConn.Close()
 
 		tbConn := timebox.NewConn(btConn)
 		if err := tbConn.Initialize(); err != nil {
-			log.Fatalf("unable to establish connection with timebox: %s\n", err.Error())
+			log.Fatalf("unable to establish connection with timebox: %w\n", err)
 		}
 
-		tbConn.SetColor(&timebox.Colour{R: 0, G: 255, B: 66})
+		tbConn.SetColor(&timebox.Colour{
+			R: byte(viper.GetInt("timebox.color.red")),
+			G: byte(viper.GetInt("timebox.color.green")),
+			B: byte(viper.GetInt("timebox.color.blue")),
+		})
 
 		tbConn.SetBrightness(100)
 		tbConn.SetTime(time.Now())
 
 		go func() {
+			if !viper.IsSet("weather.addr") {
+				log.Printf("no weather address provided, will not check for weather updates")
+				return
+			}
+
+			viper.SetDefault("weather.latitude", 0)
+			viper.SetDefault("weather.longitude", 0)
+
 			for {
 				var opts []grpc.DialOption
 				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-				conn, err := grpc.NewClient(*weatherAddr, opts...)
+				conn, err := grpc.NewClient(viper.GetString("weather.addr"), opts...)
 				if err != nil {
-					log.Printf("unable to connect to weather service: %s\n", err.Error())
+					log.Printf("unable to connect to weather service: %w\n", err)
 					continue
 				}
 				defer conn.Close()
 
 				weatherClient := weather.NewWeatherServiceClient(conn)
 				currWeather, err := weatherClient.GetCurrentReport(context.Background(), &weather.GetCurrentReportRequest{
-					Latitude:  *weatherLat,
-					Longitude: *weatherLon,
+					Latitude:  viper.GetFloat64("weather.latitude"),
+					Longitude: viper.GetFloat64("weather.longitude"),
 				})
 				if err != nil {
-					log.Printf("unable to get current weather conditions: %s\n", err.Error())
+					log.Printf("unable to get current weather conditions: %w\n", err)
 					continue
 				}
 
@@ -228,7 +245,7 @@ func main() {
 			time.Sleep(time.Hour)
 
 			if err := mplc.RefreshPlaylists(context.Background()); err != nil {
-				log.Printf("unable to refresh spotify playlist: %s\n", err.Error())
+				log.Printf("unable to refresh spotify playlist: %w\n", err)
 			} else {
 				log.Printf("playlists refreshed\n")
 			}
