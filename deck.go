@@ -88,6 +88,11 @@ func (d *Deck) RefreshScreen() {
 	}
 }
 
+// Screen returns the currently active screen
+func (d *Deck) Screen() Screen {
+	return d.screen
+}
+
 // Run starts the loop of listening for inputs from the user on the stream deck.
 func (d *Deck) Run(ctx context.Context) {
 	d.RefreshScreen()

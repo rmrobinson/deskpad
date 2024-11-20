@@ -4,15 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad"
+	"github.com/rmrobinson/deskpad/ui"
+	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
 type MediaItem struct {
-	Title        string   `json:"title"`
-	Artists      []string `json:"artists"`
-	AlbumName    string   `json:"albumName"`
-	PlaylistName string   `json:"playlistName"`
-	AlbumArtURL  string   `json:"albumArtUrl"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Artists     []string `json:"artists"`
+	AlbumName   string   `json:"albumName"`
+	AlbumArtURL string   `json:"albumArtUrl"`
+}
+type MediaPlaylist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 type AudioOutput struct {
 	ID          string `json:"id"`
@@ -29,15 +35,29 @@ type StatusResponse struct {
 		DefaultOutputID string        `json:"defaultOutputId"`
 	} `json:"audio"`
 	MediaPlayer struct {
-		State            string     `json:"state"`
-		CurrentlyPlaying *MediaItem `json:"currentlyPlaying"`
+		State            string         `json:"state"`
+		CurrentlyPlaying *MediaItem     `json:"currentlyPlaying"`
+		CurrentPlaylist  *MediaPlaylist `json:"currentPlaylist"`
 	}
+	UI struct {
+		CurrentScreen struct {
+			Name string `json:"name"`
+		} `json:"currentScreen"`
+	} `json:"ui"`
 	// TODO: add playlists
 }
 
+type MediaPlayerController interface {
+	IsPlaying() bool
+	CurrentlyPlaying() *ui.MediaItem
+}
+
 type API struct {
-	mpc  service.MediaPlayerController
-	mpsc service.MediaPlayerSettingController
+	mpc  MediaPlayerController
+	mplc *controllers.MediaPlaylist
+	mpsc *controllers.MediaPlayerSetting
+
+	d *deskpad.Deck
 }
 
 func (a *API) Status(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +70,8 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		resp := &StatusResponse{}
 
+		resp.UI.CurrentScreen.Name = a.d.Screen().Name()
+
 		isPlaying := a.mpc.IsPlaying()
 		if isPlaying {
 			resp.MediaPlayer.State = "Playing"
@@ -57,7 +79,7 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 			resp.MediaPlayer.State = "Not Playing"
 		}
 
-		outputs := a.mpsc.GetAudioOutputs(r.Context())
+		outputs := a.mpsc.GetAudioOutputs()
 
 		for _, output := range outputs {
 			resp.Audio.Outputs = append(resp.Audio.Outputs, AudioOutput{
@@ -69,13 +91,21 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		currentlyPlaying := a.mpc.CurrentlyPlaying(r.Context())
+		currentlyPlaying := a.mpc.CurrentlyPlaying()
 		if currentlyPlaying != nil {
 			resp.MediaPlayer.CurrentlyPlaying = &MediaItem{
+				ID:          currentlyPlaying.ID,
 				Title:       currentlyPlaying.Title,
 				Artists:     currentlyPlaying.Artists,
 				AlbumName:   currentlyPlaying.AlbumName,
 				AlbumArtURL: currentlyPlaying.AlburmArtURL,
+			}
+		}
+		currentPlaylist := a.mplc.CurrentlyPlaylist()
+		if currentPlaylist != nil {
+			resp.MediaPlayer.CurrentPlaylist = &MediaPlaylist{
+				ID:   currentPlaylist.ID,
+				Name: currentPlaylist.Name,
 			}
 		}
 

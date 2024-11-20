@@ -13,8 +13,8 @@ import (
 	"github.com/godbus/dbus"
 	"github.com/lawl/pulseaudio"
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
-	"github.com/rmrobinson/deskpad/ui"
+	"github.com/rmrobinson/deskpad/ui/controllers"
+	"github.com/rmrobinson/deskpad/ui/screens"
 	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
 	bt "github.com/rmrobinson/timebox/bluetooth"
@@ -68,18 +68,11 @@ func main() {
 
 	// Setup Spotify. This is used as the playlist provider; and if not using the Linux MPRIS interface
 	// it will also be used to control media playback.
-	spotifyMP := service.NewSpotifyMediaPlayer(configureSpotifyClient(ctx))
+	spotifyClient := configureSpotifyClient(ctx)
 
-	if err := spotifyMP.RefreshPlayerState(ctx); err != nil {
-		log.Fatalf("unable to refresh spotify player state: %s\n", err.Error())
-	}
-	if err := spotifyMP.RefreshPlaylists(ctx); err != nil {
-		log.Fatalf("unable to refresh spotify playlists: %s\n", err.Error())
-	}
-
-	var mediaPlayer service.MediaPlayerController
-	var mediaPlayerSettings service.MediaPlayerSettingController
-
+	var mprisClient *mpris.Player
+	var pulseAudioClient *pulseaudio.Client
+	// Setup MPRIS & PulseAudio, if configured
 	if *useMPRIS {
 		conn, err := dbus.SessionBus()
 		if err != nil {
@@ -97,7 +90,7 @@ func main() {
 
 		name := names[0]
 		log.Printf("*** Using MPRIS media player '%s'\n", name)
-		mprisPlayer := mpris.New(conn, name)
+		mprisClient = mpris.New(conn, name)
 
 		paClient, err := pulseaudio.NewClient()
 		if err != nil {
@@ -105,40 +98,8 @@ func main() {
 		}
 		defer paClient.Close()
 
-		linuxMP := service.NewLinuxMediaPlayer(mprisPlayer, paClient)
-		mediaPlayer = linuxMP
-		mediaPlayerSettings = linuxMP
-	} else {
-		mediaPlayer = spotifyMP
-		mediaPlayerSettings = spotifyMP
+		pulseAudioClient = paClient
 	}
-
-	// Keep the Spotify playlists fresh
-	go func() {
-		for {
-			time.Sleep(time.Hour)
-
-			if err := spotifyMP.RefreshPlaylists(context.Background()); err != nil {
-				log.Printf("unable to refresh spotify playlist: %s\n", err.Error())
-			} else {
-				log.Printf("playlists refreshed\n")
-			}
-		}
-	}()
-
-	// Set up the API
-	go func() {
-		api := &API{
-			mpc:  mediaPlayer,
-			mpsc: mediaPlayerSettings,
-		}
-
-		mux := http.NewServeMux()
-		mux.HandleFunc("/status", api.Status)
-
-		log.Printf("starting http api\n")
-		http.ListenAndServe(":1337", mux)
-	}()
 
 	var tbc *timebox.Conn
 	// Setup Timebox, if configured
@@ -168,29 +129,70 @@ func main() {
 	}
 
 	// Set up the UI
-	mps := ui.NewMediaPlayerScreen(mediaPlayer)
+	hc := controllers.NewHome(tbc)
+	hs := screens.NewHome(hc)
 
-	mpss := ui.NewMediaPlayerSettingScreen(mediaPlayerSettings)
-	mpss.RefreshDevices(ctx)
+	var mps *screens.MediaPlayer
+	var linuxMpc *controllers.LinuxMediaPlayer
+	var spotifyMpc *controllers.SpotifyMediaPlayer
 
-	mpls := ui.NewMediaPlaylistScreen(spotifyMP, mediaPlayer)
+	if mprisClient != nil && pulseAudioClient != nil {
+		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, pulseAudioClient)
+		mps = screens.NewMediaPlayer(hs, linuxMpc)
+	} else {
+		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
+		mps = screens.NewMediaPlayer(hs, spotifyMpc)
+	}
 
-	sbs := ui.NewScoreboardScreen(tbc)
+	mpsc := controllers.NewMediaPlayerSetting(spotifyClient, pulseAudioClient)
+	mpsc.RefreshAudioOutputs(ctx)
 
-	hs := ui.NewHomeScreen(mps, mpls, sbs, tbc)
-
-	mpss.SetHomeScreen(hs)
+	mpss := screens.NewMediaPlayerSetting(hs, mpsc)
 	mpss.SetPlayerScreen(mps)
-
-	mps.SetHomeScreen(hs)
-	mps.SetPlaylistScreen(mpls)
 	mps.SetSettingsScreen(mpss)
 
-	mpls.SetHomeScreen(hs)
-	mpls.SetPlayerScreen(mps)
+	mplc := controllers.NewMediaPlaylist(spotifyClient, mprisClient)
+	mplc.RefreshPlaylists(ctx)
 
-	sbs.SetHomeScreen(hs)
+	mpls := screens.NewMediaPlaylist(hs, mplc)
+	mpls.SetPlayerScreen(mps)
+	mps.SetPlaylistScreen(mpls)
+
+	// Keep the playlists fresh
+	go func() {
+		for {
+			time.Sleep(time.Hour)
+
+			if err := mplc.RefreshPlaylists(context.Background()); err != nil {
+				log.Printf("unable to refresh spotify playlist: %s\n", err.Error())
+			} else {
+				log.Printf("playlists refreshed\n")
+			}
+		}
+	}()
+
+	if tbc != nil {
+		sc := controllers.NewScoreboard(tbc)
+		_ = screens.NewScoreboard(hs, sc)
+	}
 
 	d := deskpad.NewDeck(sd, hs)
+
+	// Set up the API
+	go func() {
+		api := &API{
+			mpc:  linuxMpc,
+			mplc: mplc,
+			mpsc: mpsc,
+			d:    d,
+		}
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/status", api.Status)
+
+		log.Printf("starting http api\n")
+		http.ListenAndServe(":1337", mux)
+	}()
+
 	d.Run(ctx)
 }

@@ -1,4 +1,4 @@
-package ui
+package screens
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/disintegration/gift"
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 )
 
 const (
@@ -16,56 +16,64 @@ const (
 	mediaPlaylistNextKeyID   = 14
 )
 
-// MediaPlaylistScreen displays a number of different media playlists to the user.
-type MediaPlaylistScreen struct {
-	mpc    service.MediaPlaylistController
-	mplayc service.MediaPlayerController
+// MediaPlaylist displays a number of different media playlists to the user.
+type MediaPlaylist struct {
+	iconImg    image.Image
+	keys       []image.Image
+	controller MediaPlaylistController
 
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
-	playlists          []service.MediaPlaylist
+	playlists          []ui.MediaPlaylist // TODO: move this logic over to the controller
 	currPlaylistOffset int
-
-	keys []image.Image
 }
 
-// NewMediaPlaylistScreen creates a new instance of the playlist screen, configured with the provided playlist controller.
-func NewMediaPlaylistScreen(mpc service.MediaPlaylistController, mplayc service.MediaPlayerController) *MediaPlaylistScreen {
+// MediaPlaylistController describes the functions which this screen will use to interact with the playlist data source.
+type MediaPlaylistController interface {
+	GetPlaylists(count int, offset int) []ui.MediaPlaylist
+	StartPlaylist(ctx context.Context, id string)
+}
+
+// NewMediaPlaylist creates a new instance of the playlist screen, configured with the provided playlist controller.
+func NewMediaPlaylist(homeScreen *Home, mpc MediaPlaylistController) *MediaPlaylist {
 	// Currently setup for a StreamDeck with 15 buttons
-	mps := &MediaPlaylistScreen{
-		mpc:                mpc,
-		mplayc:             mplayc,
-		playlists:          []service.MediaPlaylist{},
-		currPlaylistOffset: 0,
+	mps := &MediaPlaylist{
+		iconImg:            loadAssetImage("assets/folder-music-fill.png"),
 		keys:               make([]image.Image, 15),
+		controller:         mpc,
+		homeScreen:         homeScreen,
+		playlists:          []ui.MediaPlaylist{},
+		currPlaylistOffset: 0,
 	}
 
-	mps.keys[mediaPlaylistHomeKeyID] = loadAssetImage("assets/home-3-fill.png")
-	mps.keys[mediaPlaylistPlayerKeyID] = loadAssetImage("assets/music-2-fill.png")
+	mps.keys[mediaPlaylistHomeKeyID] = homeScreen.Icon()
 	mps.keys[mediaPlaylistNextKeyID] = loadAssetImage("assets/skip-right-line.png")
+
+	homeScreen.RegisterScreen(mps)
 
 	return mps
 }
 
-// SetHomeScreen configures the screen navigated to when the 'Home' button is pressed
-func (mps *MediaPlaylistScreen) SetHomeScreen(screen deskpad.Screen) {
-	mps.homeScreen = screen
-}
-
 // SetPlayerScreen configures the screen navigated to when the 'Player' button is pressed
-func (mps *MediaPlaylistScreen) SetPlayerScreen(screen deskpad.Screen) {
+func (mps *MediaPlaylist) SetPlayerScreen(screen deskpad.Screen) {
 	mps.playerScreen = screen
+	mps.keys[mediaPlaylistPlayerKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media playlist"
-func (mps *MediaPlaylistScreen) Name() string {
+func (mps *MediaPlaylist) Name() string {
 	return "media playlist"
 }
 
+// Icon returns the icon to display for this screen
+func (mps *MediaPlaylist) Icon() image.Image {
+	return mps.iconImg
+}
+
 // Show returns the image set which will be shown to the user.
-func (mps *MediaPlaylistScreen) Show() []image.Image {
-	mps.playlists = mps.mpc.GetPlaylists(12, mps.currPlaylistOffset)
+func (mps *MediaPlaylist) Show() []image.Image {
+	mps.playlists = mps.controller.GetPlaylists(12, mps.currPlaylistOffset)
 
 	for playlistPos, playlist := range mps.playlists {
 		mps.keys[playlistIdxToKeyID(playlistPos)] = resize(playlist.Icon)
@@ -79,7 +87,7 @@ func (mps *MediaPlaylistScreen) Show() []image.Image {
 }
 
 // KeyPressed handles the logic of what to do when a given key is pressed.
-func (mps *MediaPlaylistScreen) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
+func (mps *MediaPlaylist) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
 	if t == deskpad.KeyPressLong {
 		log.Print("got a long key press!\n")
 	}
@@ -107,7 +115,7 @@ func (mps *MediaPlaylistScreen) KeyPressed(ctx context.Context, id int, t deskpa
 	}
 
 	playlistIdx := keyIDToPlaylistIdx(id)
-	mps.mplayc.StartPlaylist(ctx, mps.playlists[playlistIdx].ID)
+	mps.controller.StartPlaylist(ctx, mps.playlists[playlistIdx].ID)
 
 	return deskpad.KeyPressAction{
 		Action: deskpad.KeyPressActionNoop,
