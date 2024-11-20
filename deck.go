@@ -97,7 +97,7 @@ func (d *Deck) Screen() Screen {
 func (d *Deck) ID() string {
 	id, err := d.sd.Serial()
 	if err != nil {
-		log.Printf("error getting streamdeck id: %w\n", err)
+		log.Printf("error getting streamdeck id: %s\n", err.Error())
 		return ""
 	}
 

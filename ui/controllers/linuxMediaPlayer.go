@@ -66,7 +66,7 @@ func (m *LinuxMediaPlayer) Rewind() {
 func (m *LinuxMediaPlayer) VolumeUp() {
 	v, err := m.paClient.Volume()
 	if err != nil {
-		log.Printf("error getting volume: %w\n", err)
+		log.Printf("error getting volume: %s\n", err.Error())
 		return
 	}
 
@@ -80,7 +80,7 @@ func (m *LinuxMediaPlayer) VolumeUp() {
 func (m *LinuxMediaPlayer) VolumeDown() {
 	v, err := m.paClient.Volume()
 	if err != nil {
-		log.Printf("error getting volume: %w\n", err)
+		log.Printf("error getting volume: %s\n", err.Error())
 		return
 	}
 
@@ -115,7 +115,7 @@ func (m *LinuxMediaPlayer) IsShuffle() bool {
 func (m *LinuxMediaPlayer) IsMuted() bool {
 	muted, err := m.paClient.Mute()
 	if err != nil {
-		log.Printf("error getting muted state: %w\n", err)
+		log.Printf("error getting muted state: %s\n", err.Error())
 		return false
 	}
 
