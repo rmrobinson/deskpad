@@ -38,11 +38,13 @@ type StatusResponse struct {
 		State            string         `json:"state"`
 		CurrentlyPlaying *MediaItem     `json:"currentlyPlaying"`
 		CurrentPlaylist  *MediaPlaylist `json:"currentPlaylist"`
+		ID               string         `json:"id"`
 	}
 	UI struct {
 		CurrentScreen struct {
 			Name string `json:"name"`
 		} `json:"currentScreen"`
+		StreamdeckID string `json:"streamDeckId"`
 	} `json:"ui"`
 	// TODO: add playlists
 }
@@ -50,6 +52,7 @@ type StatusResponse struct {
 type MediaPlayerController interface {
 	IsPlaying() bool
 	CurrentlyPlaying() *ui.MediaItem
+	ID() string
 }
 
 type API struct {
@@ -71,6 +74,7 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 		resp := &StatusResponse{}
 
 		resp.UI.CurrentScreen.Name = a.d.Screen().Name()
+		resp.UI.StreamdeckID = a.d.ID()
 
 		isPlaying := a.mpc.IsPlaying()
 		if isPlaying {
@@ -78,6 +82,7 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 		} else {
 			resp.MediaPlayer.State = "Not Playing"
 		}
+		resp.MediaPlayer.ID = a.mpc.ID()
 
 		outputs := a.mpsc.GetAudioOutputs()
 

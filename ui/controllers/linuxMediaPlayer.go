@@ -14,7 +14,8 @@ import (
 // media playlists - paired with a suitable MPRIS agent and the Spotify media player it can play the playlist
 // URIs returned by the Spotify player playlist functions.
 type LinuxMediaPlayer struct {
-	mprisClient *mpris.Player
+	mprisClient       *mpris.Player
+	mprisInstanceName string
 
 	paClient *pulseaudio.Client
 
@@ -22,11 +23,16 @@ type LinuxMediaPlayer struct {
 }
 
 // NewLinuxMediaPlayer creates a new player using the supplied MRPIS and PulseAudio clients
-func NewLinuxMediaPlayer(mprisClient *mpris.Player, paClient *pulseaudio.Client) *LinuxMediaPlayer {
+func NewLinuxMediaPlayer(mprisClient *mpris.Player, mprisInstanceName string, paClient *pulseaudio.Client) *LinuxMediaPlayer {
 	return &LinuxMediaPlayer{
-		mprisClient: mprisClient,
-		paClient:    paClient,
+		mprisClient:       mprisClient,
+		mprisInstanceName: mprisInstanceName,
+		paClient:          paClient,
 	}
+}
+
+func (m *LinuxMediaPlayer) ID() string {
+	return m.mprisInstanceName
 }
 
 func (m *LinuxMediaPlayer) Play() {
@@ -60,7 +66,7 @@ func (m *LinuxMediaPlayer) Rewind() {
 func (m *LinuxMediaPlayer) VolumeUp() {
 	v, err := m.paClient.Volume()
 	if err != nil {
-		log.Printf("error getting volume: %s\n", err.Error())
+		log.Printf("error getting volume: %w\n", err)
 		return
 	}
 
@@ -74,7 +80,7 @@ func (m *LinuxMediaPlayer) VolumeUp() {
 func (m *LinuxMediaPlayer) VolumeDown() {
 	v, err := m.paClient.Volume()
 	if err != nil {
-		log.Printf("error getting volume: %s\n", err.Error())
+		log.Printf("error getting volume: %w\n", err)
 		return
 	}
 
@@ -109,7 +115,7 @@ func (m *LinuxMediaPlayer) IsShuffle() bool {
 func (m *LinuxMediaPlayer) IsMuted() bool {
 	muted, err := m.paClient.Mute()
 	if err != nil {
-		log.Printf("error getting muted state: %s\n", err.Error())
+		log.Printf("error getting muted state: %w\n", err)
 		return false
 	}
 

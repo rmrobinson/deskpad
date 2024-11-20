@@ -33,7 +33,7 @@ func NewSpotifyMediaPlayer(ctx context.Context, client *spotify.Client) *Spotify
 func (mp *SpotifyMediaPlayer) RefreshPlayerState() error {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting is playing: %s\n", err.Error())
+		log.Printf("error getting is playing: %w\n", err)
 		return err
 	}
 
@@ -43,29 +43,39 @@ func (mp *SpotifyMediaPlayer) RefreshPlayerState() error {
 	return nil
 }
 
+func (mp *SpotifyMediaPlayer) ID() string {
+	state, err := mp.client.PlayerState(mp.ctx)
+	if err != nil {
+		log.Printf("unable to get player state: %w\n", err)
+		return ""
+	}
+
+	return state.Device.ID.String()
+}
+
 func (mp *SpotifyMediaPlayer) Play() {
 	if err := mp.client.Play(mp.ctx); err != nil {
-		log.Printf("error playing: %s\n", err.Error())
+		log.Printf("error playing: %w\n", err)
 	}
 	mp.isPlaying = true
 }
 
 func (mp *SpotifyMediaPlayer) Pause() {
 	if err := mp.client.Pause(mp.ctx); err != nil {
-		log.Printf("error pausing: %s\n", err.Error())
+		log.Printf("error pausing: %w\n", err)
 	}
 	mp.isPlaying = false
 }
 
 func (mp *SpotifyMediaPlayer) Next() {
 	if err := mp.client.Next(mp.ctx); err != nil {
-		log.Printf("error going next: %s\n", err.Error())
+		log.Printf("error going next: %w\n", err)
 	}
 }
 
 func (mp *SpotifyMediaPlayer) Previous() {
 	if err := mp.client.Previous(mp.ctx); err != nil {
-		log.Printf("error going previous: %s\n", err.Error())
+		log.Printf("error going previous: %w\n", err)
 	}
 }
 
@@ -84,7 +94,7 @@ func (mp *SpotifyMediaPlayer) IsMuted() bool {
 func (mp *SpotifyMediaPlayer) FastForward() {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting current position: %s\n", err.Error())
+		log.Printf("error getting current position: %w\n", err)
 	}
 
 	newTime := int(state.CurrentlyPlaying.Progress) + 10000
@@ -96,14 +106,14 @@ func (mp *SpotifyMediaPlayer) FastForward() {
 	}
 
 	if err := mp.client.Seek(mp.ctx, newTime); err != nil {
-		log.Printf("error fast forwarding 10 seconds: %s\n", err.Error())
+		log.Printf("error fast forwarding 10 seconds: %w\n", err)
 	}
 }
 
 func (mp *SpotifyMediaPlayer) Rewind() {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting current position: %s\n", err.Error())
+		log.Printf("error getting current position: %w\n", err)
 	}
 
 	newTime := int(state.CurrentlyPlaying.Progress) - 10000
@@ -114,28 +124,28 @@ func (mp *SpotifyMediaPlayer) Rewind() {
 	}
 
 	if err := mp.client.Seek(mp.ctx, newTime); err != nil {
-		log.Printf("error rewinding 10 seconds: %s\n", err.Error())
+		log.Printf("error rewinding 10 seconds: %w\n", err)
 	}
 }
 
 func (mp *SpotifyMediaPlayer) Mute() {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting current volume: %s\n", err.Error())
+		log.Printf("error getting current volume: %w\n", err)
 		return
 	}
 
 	mp.prevVolume = int(state.Device.Volume)
 
 	if err := mp.client.Volume(mp.ctx, 0); err != nil {
-		log.Printf("error muting device: %s\n", err.Error())
+		log.Printf("error muting device: %w\n", err)
 	}
 	mp.isMuted = true
 }
 
 func (mp *SpotifyMediaPlayer) Unmute() {
 	if err := mp.client.Volume(mp.ctx, mp.prevVolume); err != nil {
-		log.Printf("error unmuting device: %s\n", err.Error())
+		log.Printf("error unmuting device: %w\n", err)
 	}
 	mp.isMuted = false
 }
@@ -143,7 +153,7 @@ func (mp *SpotifyMediaPlayer) Unmute() {
 func (mp *SpotifyMediaPlayer) VolumeUp() {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting current volume: %s\n", err.Error())
+		log.Printf("error getting current volume: %w\n", err)
 		return
 	}
 
@@ -153,14 +163,14 @@ func (mp *SpotifyMediaPlayer) VolumeUp() {
 	}
 
 	if err := mp.client.Volume(mp.ctx, newVolume); err != nil {
-		log.Printf("error increasing volume: %s\n", err.Error())
+		log.Printf("error increasing volume: %w\n", err)
 	}
 }
 
 func (mp *SpotifyMediaPlayer) VolumeDown() {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting current volume: %s\n", err.Error())
+		log.Printf("error getting current volume: %w\n", err)
 		return
 	}
 
@@ -170,7 +180,7 @@ func (mp *SpotifyMediaPlayer) VolumeDown() {
 	}
 
 	if err := mp.client.Volume(mp.ctx, newVolume); err != nil {
-		log.Printf("error decreasing volume: %s\n", err.Error())
+		log.Printf("error decreasing volume: %w\n", err)
 	}
 }
 
@@ -186,7 +196,7 @@ func (mp *SpotifyMediaPlayer) Shuffle(shuffle bool) {
 func (mp *SpotifyMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
-		log.Printf("error getting currently playing: %s\n", err.Error())
+		log.Printf("error getting currently playing: %w\n", err)
 		return nil
 	}
 
