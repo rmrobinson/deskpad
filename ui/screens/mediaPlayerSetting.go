@@ -1,4 +1,4 @@
-package ui
+package screens
 
 import (
 	"context"
@@ -15,28 +15,34 @@ const (
 	mediaPlayerSettingRefreshKeyID = 14
 )
 
-// MediaPlayerSettingScreen displays configurable settings about the player to the user.
-type MediaPlayerSettingScreen struct {
-	mpsc service.MediaPlayerSettingController
+// MediaPlayerSetting displays configurable settings about the player to the user.
+type MediaPlayerSetting struct {
+	iconImg    image.Image
+	keys       []image.Image
+	controller MediaPlayerSettingController
 
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
-	devices []service.AudioOutput
-
-	iconImg image.Image
-	keys    []image.Image
+	audioOutputs []service.AudioOutput
 }
 
-// MediaPlayerSettingScreen creates a new instance of the media player setting screen, configured with the provided setting controller.
-func NewMediaPlayerSettingScreen(homeScreen *HomeScreen, mpsc service.MediaPlayerSettingController) *MediaPlayerSettingScreen {
+// MediaPlayerSettingController describes the functions which this screen will use to interact with the player setting source.
+type MediaPlayerSettingController interface {
+	GetAudioOutputs() []service.AudioOutput
+	RefreshAudioOutputs(context.Context) error
+	SelectAudioOutput(ctx context.Context, deviceID string)
+}
+
+// MediaPlayerSetting creates a new instance of the media player setting screen, configured with the provided setting controller.
+func NewMediaPlayerSetting(homeScreen *Home, mpsc MediaPlayerSettingController) *MediaPlayerSetting {
 	// Currently setup for a StreamDeck with 15 buttons
-	mpss := &MediaPlayerSettingScreen{
-		mpsc:       mpsc,
-		homeScreen: homeScreen,
-		devices:    []service.AudioOutput{},
-		iconImg:    loadAssetImage("assets/settings-3-fill.png"),
-		keys:       make([]image.Image, 15),
+	mpss := &MediaPlayerSetting{
+		iconImg:      loadAssetImage("assets/settings-3-fill.png"),
+		keys:         make([]image.Image, 15),
+		controller:   mpsc,
+		homeScreen:   homeScreen,
+		audioOutputs: []service.AudioOutput{},
 	}
 
 	mpss.keys[mediaPlayerSettingHomeKeyID] = homeScreen.Icon()
@@ -46,24 +52,30 @@ func NewMediaPlayerSettingScreen(homeScreen *HomeScreen, mpsc service.MediaPlaye
 }
 
 // SetPlayerScreen configures the screen navigated to when the 'Player' button is pressed
-func (mpss *MediaPlayerSettingScreen) SetPlayerScreen(screen deskpad.Screen) {
+func (mpss *MediaPlayerSetting) SetPlayerScreen(screen deskpad.Screen) {
 	mpss.playerScreen = screen
 	mpss.keys[mediaPlayerSettingPlayerKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media player setting"
-func (mpss *MediaPlayerSettingScreen) Name() string {
+func (mpss *MediaPlayerSetting) Name() string {
 	return "media player setting"
 }
 
 // Icon returns the icon to display for this screen
-func (mpss *MediaPlayerSettingScreen) Icon() image.Image {
+func (mpss *MediaPlayerSetting) Icon() image.Image {
 	return mpss.iconImg
 }
 
+// RefreshDevices refreshes the set of devices this screen can display
+func (mpss *MediaPlayerSetting) RefreshAudioOutputs() {
+	mpss.audioOutputs = mpss.controller.GetAudioOutputs()
+	log.Printf("got %d devices\n", len(mpss.audioOutputs))
+}
+
 // Show returns the image set which will be shown to the user.
-func (mpss *MediaPlayerSettingScreen) Show() []image.Image {
-	for devicePos, device := range mpss.devices {
+func (mpss *MediaPlayerSetting) Show() []image.Image {
+	for devicePos, device := range mpss.audioOutputs {
 		var deviceImg image.Image
 		if device.Type == service.AudioOutputTypeComputer {
 			computerImg := loadAssetImage("assets/computer-fill.png")
@@ -90,14 +102,8 @@ func (mpss *MediaPlayerSettingScreen) Show() []image.Image {
 	return mpss.keys
 }
 
-// RefreshDevices refreshes the set of devices this screen can display
-func (mpss *MediaPlayerSettingScreen) RefreshDevices(ctx context.Context) {
-	mpss.devices = mpss.mpsc.GetAudioOutputs(ctx)
-	log.Printf("got %d devices\n", len(mpss.devices))
-}
-
 // KeyPressed handles the logic of what to do when a given key is pressed.
-func (mpss *MediaPlayerSettingScreen) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
+func (mpss *MediaPlayerSetting) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
 	if t == deskpad.KeyPressLong {
 		log.Print("got a long key press!\n")
 	}
@@ -113,14 +119,14 @@ func (mpss *MediaPlayerSettingScreen) KeyPressed(ctx context.Context, id int, t 
 			NewScreen: mpss.playerScreen,
 		}, nil
 	} else if id == mediaPlayerSettingRefreshKeyID {
-		mpss.RefreshDevices(ctx)
+		mpss.RefreshAudioOutputs()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionRefreshScreen,
 		}, nil
 	}
 
 	deviceIdx := keyIDToDeviceIdx(id)
-	mpss.mpsc.PlayOnDevice(ctx, mpss.devices[deviceIdx].ID)
+	mpss.controller.SelectAudioOutput(ctx, mpss.audioOutputs[deviceIdx].ID)
 
 	return deskpad.KeyPressAction{
 		Action: deskpad.KeyPressActionNoop,

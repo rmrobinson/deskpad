@@ -1,4 +1,4 @@
-package ui
+package screens
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"log"
 
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
 )
 
 const (
@@ -25,35 +24,53 @@ const (
 	mediaPlayerSettingsKeyID    = 14
 )
 
-// MediaPlayerScreen displays a control interface to the user which allows control of their media.
-type MediaPlayerScreen struct {
-	mpc service.MediaPlayerController
+// MediaPlayer displays a control interface to the user which allows control of their media.
+type MediaPlayer struct {
+	iconImg    image.Image
+	keys       []image.Image
+	controller MediaPlayerController
 
 	homeScreen     deskpad.Screen
 	playlistScreen deskpad.Screen
 	settingsScreen deskpad.Screen
 
-	iconImg    image.Image
 	playImg    image.Image
 	pauseImg   image.Image
 	shuffleImg image.Image
 	loopImg    image.Image
-
-	keys []image.Image
 }
 
-// NewMediaPlayerScreen creates a new screen for handling music playback, configured with the provided media player controller.
-func NewMediaPlayerScreen(homeScreen *HomeScreen, mpc service.MediaPlayerController) *MediaPlayerScreen {
+// MediaPlayerController describes the functions which the screen will use to allow the user to interface with the media source.
+type MediaPlayerController interface {
+	Play()
+	Pause()
+	Next()
+	Previous()
+	FastForward()
+	Rewind()
+	VolumeUp()
+	VolumeDown()
+	Mute()
+	Unmute()
+	Shuffle(shuffle bool)
+
+	IsPlaying() bool
+	IsShuffle() bool
+	IsMuted() bool
+}
+
+// NewMediaPlayer creates a new screen for handling music playback, configured with the provided media player controller.
+func NewMediaPlayer(homeScreen *Home, mpc MediaPlayerController) *MediaPlayer {
 	// Currently setup for a StreamDeck with 15 buttons
-	mps := &MediaPlayerScreen{
-		mpc:        mpc,
-		homeScreen: homeScreen,
+	mps := &MediaPlayer{
 		iconImg:    loadAssetImage("assets/music-2-fill.png"),
+		keys:       make([]image.Image, 15),
+		controller: mpc,
+		homeScreen: homeScreen,
 		playImg:    loadAssetImage("assets/play-fill.png"),
 		pauseImg:   loadAssetImage("assets/pause-fill.png"),
 		shuffleImg: loadAssetImage("assets/shuffle-fill.png"),
 		loopImg:    loadAssetImage("assets/repeat-fill.png"),
-		keys:       make([]image.Image, 15),
 	}
 
 	mps.keys[mediaPlayerHomeKeyID] = homeScreen.Icon()
@@ -71,36 +88,36 @@ func NewMediaPlayerScreen(homeScreen *HomeScreen, mpc service.MediaPlayerControl
 }
 
 // SetPlaylistScreen configures the screen navigated to when the 'Playlist' button is pressed
-func (mps *MediaPlayerScreen) SetPlaylistScreen(screen deskpad.Screen) {
+func (mps *MediaPlayer) SetPlaylistScreen(screen deskpad.Screen) {
 	mps.playlistScreen = screen
 	mps.keys[mediaPlayerPlaylistKeyID] = screen.Icon()
 }
 
 // SetSettingsScreen configures the screen navigated to when the 'Settings' button is pressed
-func (mps *MediaPlayerScreen) SetSettingsScreen(screen deskpad.Screen) {
+func (mps *MediaPlayer) SetSettingsScreen(screen deskpad.Screen) {
 	mps.settingsScreen = screen
 	mps.keys[mediaPlayerSettingsKeyID] = screen.Icon()
 }
 
 // Name is hardcoded to display as "media player"
-func (mps *MediaPlayerScreen) Name() string {
+func (mps *MediaPlayer) Name() string {
 	return "media player"
 }
 
 // Icon returns the icon to display for this screen
-func (mps *MediaPlayerScreen) Icon() image.Image {
+func (mps *MediaPlayer) Icon() image.Image {
 	return mps.iconImg
 }
 
 // Show returns the image set which will be shown to the user.
-func (mps *MediaPlayerScreen) Show() []image.Image {
-	if mps.mpc.IsPlaying() {
+func (mps *MediaPlayer) Show() []image.Image {
+	if mps.controller.IsPlaying() {
 		mps.keys[mediaPlayerPlayPauseKeyID] = mps.pauseImg
 	} else {
 		mps.keys[mediaPlayerPlayPauseKeyID] = mps.playImg
 	}
 
-	if mps.mpc.IsShuffle() {
+	if mps.controller.IsShuffle() {
 		mps.keys[mediaPlayerShuffleLoopKeyID] = mps.loopImg
 	} else {
 		mps.keys[mediaPlayerShuffleLoopKeyID] = mps.shuffleImg
@@ -110,76 +127,76 @@ func (mps *MediaPlayerScreen) Show() []image.Image {
 }
 
 // KeyPressed handles the logic of what to do when a given key is pressed.
-func (mps *MediaPlayerScreen) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
+func (mps *MediaPlayer) KeyPressed(ctx context.Context, id int, t deskpad.KeyPressType) (deskpad.KeyPressAction, error) {
 	if t == deskpad.KeyPressLong {
 		log.Print("got a long key press!\n")
 	}
 
 	if id == mediaPlayerPrevKeyID {
-		mps.mpc.Previous(ctx)
+		mps.controller.Previous()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerNextKeyID {
-		mps.mpc.Next(ctx)
+		mps.controller.Next()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerShuffleLoopKeyID {
-		if mps.mpc.IsShuffle() {
-			mps.mpc.Shuffle(ctx, false)
+		if mps.controller.IsShuffle() {
+			mps.controller.Shuffle(false)
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.loopImg,
 			}, nil
 		} else {
-			mps.mpc.Shuffle(ctx, true)
+			mps.controller.Shuffle(true)
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.shuffleImg,
 			}, nil
 		}
 	} else if id == mediaPlayerRewindKeyID {
-		mps.mpc.Rewind(ctx)
+		mps.controller.Rewind()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerPlayPauseKeyID {
-		if mps.mpc.IsPlaying() {
-			mps.mpc.Pause(ctx)
+		if mps.controller.IsPlaying() {
+			mps.controller.Pause()
 
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.playImg,
 			}, nil
 		} else {
-			mps.mpc.Play(ctx)
+			mps.controller.Play()
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.pauseImg,
 			}, nil
 		}
 	} else if id == mediaPlayerFastForwardKeyID {
-		mps.mpc.FastForward(ctx)
+		mps.controller.FastForward()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerVolDownKeyID {
-		mps.mpc.VolumeDown(ctx)
+		mps.controller.VolumeDown()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerVolMuteKeyID {
-		if mps.mpc.IsMuted() {
-			mps.mpc.Unmute(ctx)
+		if mps.controller.IsMuted() {
+			mps.controller.Unmute()
 		} else {
-			mps.mpc.Mute(ctx)
+			mps.controller.Mute()
 		}
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil
 	} else if id == mediaPlayerVolUpKeyID {
-		mps.mpc.VolumeUp(ctx)
+		mps.controller.VolumeUp()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
 		}, nil

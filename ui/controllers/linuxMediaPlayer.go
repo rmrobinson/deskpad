@@ -1,11 +1,10 @@
-package service
+package controllers
 
 import (
-	"context"
-	"fmt"
 	"log"
 
 	"github.com/lawl/pulseaudio"
+	"github.com/rmrobinson/deskpad/service"
 	"github.com/rmrobinson/go-mpris"
 )
 
@@ -30,25 +29,25 @@ func NewLinuxMediaPlayer(mprisClient *mpris.Player, paClient *pulseaudio.Client)
 	}
 }
 
-func (m *LinuxMediaPlayer) Play(ctx context.Context) {
+func (m *LinuxMediaPlayer) Play() {
 	m.mprisClient.Play()
 }
-func (m *LinuxMediaPlayer) Pause(ctx context.Context) {
+func (m *LinuxMediaPlayer) Pause() {
 	m.mprisClient.Pause()
 }
-func (m *LinuxMediaPlayer) Next(ctx context.Context) {
+func (m *LinuxMediaPlayer) Next() {
 	m.mprisClient.Next()
 }
-func (m *LinuxMediaPlayer) Previous(ctx context.Context) {
+func (m *LinuxMediaPlayer) Previous() {
 	m.mprisClient.Previous()
 }
-func (m *LinuxMediaPlayer) FastForward(ctx context.Context) {
+func (m *LinuxMediaPlayer) FastForward() {
 	pos := m.mprisClient.GetPosition()
 
 	newPos := pos + 10000
 	m.mprisClient.SeekTo(newPos)
 }
-func (m *LinuxMediaPlayer) Rewind(ctx context.Context) {
+func (m *LinuxMediaPlayer) Rewind() {
 	pos := m.mprisClient.GetPosition()
 
 	newPos := pos - 10000
@@ -58,7 +57,7 @@ func (m *LinuxMediaPlayer) Rewind(ctx context.Context) {
 	m.mprisClient.SeekTo(newPos)
 
 }
-func (m *LinuxMediaPlayer) VolumeUp(ctx context.Context) {
+func (m *LinuxMediaPlayer) VolumeUp() {
 	v, err := m.paClient.Volume()
 	if err != nil {
 		log.Printf("error getting volume: %s\n", err.Error())
@@ -72,7 +71,7 @@ func (m *LinuxMediaPlayer) VolumeUp(ctx context.Context) {
 	m.paClient.SetVolume(v)
 }
 
-func (m *LinuxMediaPlayer) VolumeDown(ctx context.Context) {
+func (m *LinuxMediaPlayer) VolumeDown() {
 	v, err := m.paClient.Volume()
 	if err != nil {
 		log.Printf("error getting volume: %s\n", err.Error())
@@ -86,15 +85,15 @@ func (m *LinuxMediaPlayer) VolumeDown(ctx context.Context) {
 	m.paClient.SetVolume(v)
 }
 
-func (m *LinuxMediaPlayer) Mute(ctx context.Context) {
+func (m *LinuxMediaPlayer) Mute() {
 	m.paClient.SetMute(true)
 }
 
-func (m *LinuxMediaPlayer) Unmute(ctx context.Context) {
+func (m *LinuxMediaPlayer) Unmute() {
 	m.paClient.SetMute(false)
 }
 
-func (m *LinuxMediaPlayer) Shuffle(ctx context.Context, shuffle bool) {
+func (m *LinuxMediaPlayer) Shuffle(shuffle bool) {
 	m.mprisClient.SetShuffle(shuffle)
 }
 
@@ -117,12 +116,7 @@ func (m *LinuxMediaPlayer) IsMuted() bool {
 	return muted
 }
 
-func (m *LinuxMediaPlayer) StartPlaylist(ctx context.Context, id string) {
-	log.Printf("playing URI: %s\n", id)
-	m.mprisClient.OpenUri(id)
-}
-
-func (m *LinuxMediaPlayer) CurrentlyPlaying(ctx context.Context) *MediaItem {
+func (m *LinuxMediaPlayer) CurrentlyPlaying() *service.MediaItem {
 	if !m.IsPlaying() {
 		return nil
 	}
@@ -133,38 +127,11 @@ func (m *LinuxMediaPlayer) CurrentlyPlaying(ctx context.Context) *MediaItem {
 	for _, artist := range metadata["xesam:artist"].Value().([]string) {
 		artists = append(artists, artist)
 	}
-	return &MediaItem{
+	return &service.MediaItem{
 		ID:           metadata["xesam:url"].Value().(string),
 		Title:        metadata["xesam:title"].Value().(string),
 		Artists:      artists,
 		AlbumName:    metadata["xesam:album"].Value().(string),
 		AlburmArtURL: metadata["mpris:artUrl"].Value().(string),
 	}
-}
-
-func (m *LinuxMediaPlayer) GetAudioOutputs(ctx context.Context) []AudioOutput {
-	sinks, err := m.paClient.Sinks()
-	if err != nil {
-		log.Printf("unable to get pulseaudio sinks: %s\n", err.Error())
-		return []AudioOutput{}
-	}
-
-	var ret []AudioOutput
-	for _, sink := range sinks {
-		// State 0: active
-		// State 2: suspended
-		ret = append(ret, AudioOutput{
-			ID:          fmt.Sprintf("%d", sink.Index),
-			Name:        sink.Description,
-			Description: sink.Name,
-			Muted:       sink.Muted,
-			Active:      sink.SinkState == 0,
-		})
-	}
-
-	return ret
-}
-func (m *LinuxMediaPlayer) PlayOnDevice(_ context.Context, deviceID string) {
-	// Set the default sink in PulseAudio
-	m.paClient.SetDefaultSink(deviceID)
 }

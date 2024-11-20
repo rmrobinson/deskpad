@@ -6,6 +6,7 @@ import (
 
 	"github.com/rmrobinson/deskpad"
 	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
 type MediaItem struct {
@@ -41,9 +42,15 @@ type StatusResponse struct {
 	// TODO: add playlists
 }
 
+type MediaPlayerController interface {
+	IsPlaying() bool
+	CurrentlyPlaying() *service.MediaItem
+}
+
 type API struct {
-	mpc  service.MediaPlayerController
-	mpsc service.MediaPlayerSettingController
+	mpc  MediaPlayerController
+	mplc *controllers.MediaPlaylist
+	mpsc *controllers.MediaPlayerSetting
 
 	d *deskpad.Deck
 }
@@ -67,7 +74,7 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 			resp.MediaPlayer.State = "Not Playing"
 		}
 
-		outputs := a.mpsc.GetAudioOutputs(r.Context())
+		outputs := a.mpsc.GetAudioOutputs()
 
 		for _, output := range outputs {
 			resp.Audio.Outputs = append(resp.Audio.Outputs, AudioOutput{
@@ -79,7 +86,7 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		currentlyPlaying := a.mpc.CurrentlyPlaying(r.Context())
+		currentlyPlaying := a.mpc.CurrentlyPlaying()
 		if currentlyPlaying != nil {
 			resp.MediaPlayer.CurrentlyPlaying = &MediaItem{
 				Title:       currentlyPlaying.Title,
