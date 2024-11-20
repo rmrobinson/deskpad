@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/rmrobinson/deskpad"
+	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
 const (
@@ -26,6 +27,7 @@ type Home struct {
 type HomeController interface {
 	DisplayClock()
 	DisplayTemperature()
+	CurrentDisplay() controllers.HomeDisplay
 }
 
 // NewHome creates a home screen which allows navigation to the supplied screens.
@@ -53,7 +55,11 @@ func (hs *Home) Name() string {
 
 // Show returns the image set which will be shown to the user.
 func (hs *Home) Show() []image.Image {
-	hs.controller.DisplayClock()
+	if hs.controller.CurrentDisplay() == controllers.HomeDisplayClock {
+		hs.controller.DisplayClock()
+	} else if hs.controller.CurrentDisplay() == controllers.HomeDisplayTemperature {
+		hs.controller.DisplayTemperature()
+	}
 	return hs.keys
 }
 
