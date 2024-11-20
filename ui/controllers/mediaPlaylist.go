@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/go-mpris"
 	"github.com/zmb3/spotify/v2"
 	_ "golang.org/x/image/webp"
@@ -17,8 +17,8 @@ type MediaPlaylist struct {
 	spotifyClient *spotify.Client
 	mprisClient   *mpris.Player
 
-	cachedPlaylists []service.MediaPlaylist
-	currentPlaylist *service.MediaPlaylist
+	cachedPlaylists []ui.MediaPlaylist
+	currentPlaylist *ui.MediaPlaylist
 }
 
 // NewMediaPlaylist creates a controller for media playlist management. If supplied, MPRIS will be used for playback;
@@ -31,7 +31,7 @@ func NewMediaPlaylist(sc *spotify.Client, mc *mpris.Player) *MediaPlaylist {
 }
 
 // GetPlaylists retrieves the list of cached playlists.
-func (mp *MediaPlaylist) GetPlaylists(count int, offset int) []service.MediaPlaylist {
+func (mp *MediaPlaylist) GetPlaylists(count int, offset int) []ui.MediaPlaylist {
 	startIdx := offset
 	if startIdx > len(mp.cachedPlaylists) {
 		startIdx = 0
@@ -48,7 +48,7 @@ func (mp *MediaPlaylist) GetPlaylists(count int, offset int) []service.MediaPlay
 
 // RefreshPlaylists retrieves an up-to-date list of playlists. This can be run on a schedule to ensure content is up-to-date.
 func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
-	mediaPlaylists := []service.MediaPlaylist{}
+	mediaPlaylists := []ui.MediaPlaylist{}
 
 	playlists, err := mp.spotifyClient.CurrentUsersPlaylists(ctx, spotify.Limit(50))
 	if err != nil {
@@ -58,7 +58,7 @@ func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
 
 	for _, playlist := range playlists.Playlists {
 		log.Printf("got playlist %s with name %s\n", playlist.URI, playlist.Name)
-		mediaPlaylist := service.MediaPlaylist{ID: string(playlist.URI), Name: playlist.Name}
+		mediaPlaylist := ui.MediaPlaylist{ID: string(playlist.URI), Name: playlist.Name}
 		if len(playlist.Images) > 0 {
 			imgURL := playlist.Images[0].URL
 			resp, err := http.Get(imgURL)
@@ -110,7 +110,7 @@ func (mp *MediaPlaylist) StartPlaylist(ctx context.Context, id string) {
 	}
 }
 
-func (mp *MediaPlaylist) getPlaylistbyID(id string) *service.MediaPlaylist {
+func (mp *MediaPlaylist) getPlaylistbyID(id string) *ui.MediaPlaylist {
 	for _, p := range mp.cachedPlaylists {
 		if p.ID == id {
 			return &p

@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
@@ -44,7 +44,7 @@ type StatusResponse struct {
 
 type MediaPlayerController interface {
 	IsPlaying() bool
-	CurrentlyPlaying() *service.MediaItem
+	CurrentlyPlaying() *ui.MediaItem
 }
 
 type API struct {

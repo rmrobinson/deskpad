@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/lawl/pulseaudio"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/go-mpris"
 )
 
@@ -116,7 +116,7 @@ func (m *LinuxMediaPlayer) IsMuted() bool {
 	return muted
 }
 
-func (m *LinuxMediaPlayer) CurrentlyPlaying() *service.MediaItem {
+func (m *LinuxMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
 	if !m.IsPlaying() {
 		return nil
 	}
@@ -127,7 +127,7 @@ func (m *LinuxMediaPlayer) CurrentlyPlaying() *service.MediaItem {
 	for _, artist := range metadata["xesam:artist"].Value().([]string) {
 		artists = append(artists, artist)
 	}
-	return &service.MediaItem{
+	return &ui.MediaItem{
 		ID:           metadata["xesam:url"].Value().(string),
 		Title:        metadata["xesam:title"].Value().(string),
 		Artists:      artists,

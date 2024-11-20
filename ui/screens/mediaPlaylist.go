@@ -7,7 +7,7 @@ import (
 
 	"github.com/disintegration/gift"
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 )
 
 const (
@@ -25,13 +25,13 @@ type MediaPlaylist struct {
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
-	playlists          []service.MediaPlaylist // TODO: move this logic over to the controller
+	playlists          []ui.MediaPlaylist // TODO: move this logic over to the controller
 	currPlaylistOffset int
 }
 
 // MediaPlaylistController describes the functions which this screen will use to interact with the playlist data source.
 type MediaPlaylistController interface {
-	GetPlaylists(count int, offset int) []service.MediaPlaylist
+	GetPlaylists(count int, offset int) []ui.MediaPlaylist
 	StartPlaylist(ctx context.Context, id string)
 }
 
@@ -43,7 +43,7 @@ func NewMediaPlaylist(homeScreen *Home, mpc MediaPlaylistController) *MediaPlayl
 		keys:               make([]image.Image, 15),
 		controller:         mpc,
 		homeScreen:         homeScreen,
-		playlists:          []service.MediaPlaylist{},
+		playlists:          []ui.MediaPlaylist{},
 		currPlaylistOffset: 0,
 	}
 

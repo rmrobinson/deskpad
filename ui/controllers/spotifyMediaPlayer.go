@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/zmb3/spotify/v2"
 )
 
@@ -183,7 +183,7 @@ func (mp *SpotifyMediaPlayer) Shuffle(shuffle bool) {
 	mp.isShuffle = shuffle
 }
 
-func (mp *SpotifyMediaPlayer) CurrentlyPlaying() *service.MediaItem {
+func (mp *SpotifyMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
 		log.Printf("error getting currently playing: %s\n", err.Error())
@@ -195,7 +195,7 @@ func (mp *SpotifyMediaPlayer) CurrentlyPlaying() *service.MediaItem {
 		for _, artist := range state.CurrentlyPlaying.Item.Artists {
 			artists = append(artists, artist.Name)
 		}
-		return &service.MediaItem{
+		return &ui.MediaItem{
 			ID:        string(state.CurrentlyPlaying.Item.ID),
 			Title:     state.CurrentlyPlaying.Item.Name,
 			Artists:   artists,

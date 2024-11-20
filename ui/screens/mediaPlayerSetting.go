@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 )
 
 const (
@@ -24,12 +24,12 @@ type MediaPlayerSetting struct {
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
-	audioOutputs []service.AudioOutput
+	audioOutputs []ui.AudioOutput
 }
 
 // MediaPlayerSettingController describes the functions which this screen will use to interact with the player setting source.
 type MediaPlayerSettingController interface {
-	GetAudioOutputs() []service.AudioOutput
+	GetAudioOutputs() []ui.AudioOutput
 	RefreshAudioOutputs(context.Context) error
 	SelectAudioOutput(ctx context.Context, deviceID string)
 }
@@ -42,7 +42,7 @@ func NewMediaPlayerSetting(homeScreen *Home, mpsc MediaPlayerSettingController) 
 		keys:         make([]image.Image, 15),
 		controller:   mpsc,
 		homeScreen:   homeScreen,
-		audioOutputs: []service.AudioOutput{},
+		audioOutputs: []ui.AudioOutput{},
 	}
 
 	mpss.keys[mediaPlayerSettingHomeKeyID] = homeScreen.Icon()
@@ -77,13 +77,13 @@ func (mpss *MediaPlayerSetting) RefreshAudioOutputs() {
 func (mpss *MediaPlayerSetting) Show() []image.Image {
 	for devicePos, device := range mpss.audioOutputs {
 		var deviceImg image.Image
-		if device.Type == service.AudioOutputTypeComputer {
+		if device.Type == ui.AudioOutputTypeComputer {
 			computerImg := loadAssetImage("assets/computer-fill.png")
 			deviceImg = NewTextIconWithBackground(device.Name, computerImg)
-		} else if device.Type == service.AudioOutputTypeSmartphone {
+		} else if device.Type == ui.AudioOutputTypeSmartphone {
 			smartphoneImg := loadAssetImage("assets/smartphone-fill.png")
 			deviceImg = NewTextIconWithBackground(device.Name, smartphoneImg)
-		} else if device.Type == service.AudioOutputTypeSpeaker {
+		} else if device.Type == ui.AudioOutputTypeSpeaker {
 			speakerImg := loadAssetImage("assets/speaker-fill.png")
 			deviceImg = NewTextIconWithBackground(device.Name, speakerImg)
 		} else {

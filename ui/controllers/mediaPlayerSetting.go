@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/lawl/pulseaudio"
-	"github.com/rmrobinson/deskpad/service"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/zmb3/spotify/v2"
 )
 
@@ -15,7 +15,7 @@ type MediaPlayerSetting struct {
 	spotifyClient *spotify.Client
 	paClient      *pulseaudio.Client
 
-	cachedAudioOutputs []service.AudioOutput
+	cachedAudioOutputs []ui.AudioOutput
 }
 
 // NewMediaPlayerSetting creates a new media player setting controller. If the pulseAudio client isn't supplied,
@@ -28,12 +28,12 @@ func NewMediaPlayerSetting(sc *spotify.Client, pac *pulseaudio.Client) *MediaPla
 }
 
 // GetAudioOutputs returns the list of available audio outputs.
-func (mps *MediaPlayerSetting) GetAudioOutputs() []service.AudioOutput {
+func (mps *MediaPlayerSetting) GetAudioOutputs() []ui.AudioOutput {
 	return mps.cachedAudioOutputs
 }
 
 func (mps *MediaPlayerSetting) RefreshAudioOutputs(ctx context.Context) error {
-	var audioOutputs []service.AudioOutput
+	var audioOutputs []ui.AudioOutput
 
 	if mps.paClient != nil {
 		sinks, err := mps.paClient.Sinks()
@@ -45,7 +45,7 @@ func (mps *MediaPlayerSetting) RefreshAudioOutputs(ctx context.Context) error {
 		for _, sink := range sinks {
 			// State 0: active
 			// State 2: suspended
-			audioOutputs = append(audioOutputs, service.AudioOutput{
+			audioOutputs = append(audioOutputs, ui.AudioOutput{
 				ID:          fmt.Sprintf("%d", sink.Index),
 				Name:        sink.Description,
 				Description: sink.Name,
@@ -66,17 +66,17 @@ func (mps *MediaPlayerSetting) RefreshAudioOutputs(ctx context.Context) error {
 				continue
 			}
 
-			var deviceType service.AudioOutputType
+			var deviceType ui.AudioOutputType
 			switch device.Type {
 			case "Computer":
-				deviceType = service.AudioOutputTypeComputer
+				deviceType = ui.AudioOutputTypeComputer
 			case "Smartphone":
-				deviceType = service.AudioOutputTypeSmartphone
+				deviceType = ui.AudioOutputTypeSmartphone
 			case "Speaker":
-				deviceType = service.AudioOutputTypeSpeaker
+				deviceType = ui.AudioOutputTypeSpeaker
 			}
 
-			audioOutputs = append(audioOutputs, service.AudioOutput{
+			audioOutputs = append(audioOutputs, ui.AudioOutput{
 				ID:     string(device.ID),
 				Name:   device.Name,
 				Active: device.Active,
