@@ -77,6 +77,7 @@ func main() {
 	spotifyClient := configureSpotifyClient(ctx)
 
 	var mprisClient *mpris.Player
+	var mprisInstanceName string
 	var pulseAudioClient *pulseaudio.Client
 	// Setup MPRIS & PulseAudio, if configured
 	if viper.GetBool("use-mpris") {
@@ -94,9 +95,9 @@ func main() {
 			log.Fatal("No media player found.")
 		}
 
-		name := names[0]
-		log.Printf("*** Using MPRIS media player '%s'\n", name)
-		mprisClient = mpris.New(conn, name)
+		mprisInstanceName = names[0]
+		log.Printf("*** Using MPRIS media player '%s'\n", mprisInstanceName)
+		mprisClient = mpris.New(conn, mprisInstanceName)
 
 		paClient, err := pulseaudio.NewClient()
 		if err != nil {
@@ -218,7 +219,7 @@ func main() {
 	var spotifyMpc *controllers.SpotifyMediaPlayer
 
 	if mprisClient != nil && pulseAudioClient != nil {
-		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, pulseAudioClient)
+		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, mprisInstanceName, pulseAudioClient)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
 	} else {
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)

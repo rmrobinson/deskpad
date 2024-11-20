@@ -93,6 +93,17 @@ func (d *Deck) Screen() Screen {
 	return d.screen
 }
 
+// ID returns the ID of the stream deck being used
+func (d *Deck) ID() string {
+	id, err := d.sd.Serial()
+	if err != nil {
+		log.Printf("error getting streamdeck id: %w\n", err)
+		return ""
+	}
+
+	return id
+}
+
 // Run starts the loop of listening for inputs from the user on the stream deck.
 func (d *Deck) Run(ctx context.Context) {
 	d.RefreshScreen()
