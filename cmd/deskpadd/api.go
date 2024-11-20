@@ -10,11 +10,15 @@ import (
 )
 
 type MediaItem struct {
-	Title        string   `json:"title"`
-	Artists      []string `json:"artists"`
-	AlbumName    string   `json:"albumName"`
-	PlaylistName string   `json:"playlistName"`
-	AlbumArtURL  string   `json:"albumArtUrl"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Artists     []string `json:"artists"`
+	AlbumName   string   `json:"albumName"`
+	AlbumArtURL string   `json:"albumArtUrl"`
+}
+type MediaPlaylist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 type AudioOutput struct {
 	ID          string `json:"id"`
@@ -31,8 +35,9 @@ type StatusResponse struct {
 		DefaultOutputID string        `json:"defaultOutputId"`
 	} `json:"audio"`
 	MediaPlayer struct {
-		State            string     `json:"state"`
-		CurrentlyPlaying *MediaItem `json:"currentlyPlaying"`
+		State            string         `json:"state"`
+		CurrentlyPlaying *MediaItem     `json:"currentlyPlaying"`
+		CurrentPlaylist  *MediaPlaylist `json:"currentPlaylist"`
 	}
 	UI struct {
 		CurrentScreen struct {
@@ -89,10 +94,18 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 		currentlyPlaying := a.mpc.CurrentlyPlaying()
 		if currentlyPlaying != nil {
 			resp.MediaPlayer.CurrentlyPlaying = &MediaItem{
+				ID:          currentlyPlaying.ID,
 				Title:       currentlyPlaying.Title,
 				Artists:     currentlyPlaying.Artists,
 				AlbumName:   currentlyPlaying.AlbumName,
 				AlbumArtURL: currentlyPlaying.AlburmArtURL,
+			}
+		}
+		currentPlaylist := a.mplc.CurrentlyPlaylist()
+		if currentPlaylist != nil {
+			resp.MediaPlayer.CurrentPlaylist = &MediaPlaylist{
+				ID:   currentPlaylist.ID,
+				Name: currentPlaylist.Name,
 			}
 		}
 

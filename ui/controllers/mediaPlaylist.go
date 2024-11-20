@@ -85,7 +85,8 @@ func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
 	return nil
 }
 
-// StartPlaylist begins playing the requested playlist URI. If the MPRIS client is supplied it will use it; otherwise it'll default to Spotify.
+// StartPlaylist begins playing the requested playlist URI.
+// If the MPRIS client is supplied it will use it; otherwise it'll default to Spotify.
 func (mp *MediaPlaylist) StartPlaylist(ctx context.Context, id string) {
 	if mp.mprisClient != nil {
 		log.Printf("playing URI: %s\n", id)
@@ -108,6 +109,11 @@ func (mp *MediaPlaylist) StartPlaylist(ctx context.Context, id string) {
 		log.Printf("playing URI: %s\n", id)
 		mp.currentPlaylist = mp.getPlaylistbyID(id)
 	}
+}
+
+// CurrentPlaylist returns the currently active playlist, if set.
+func (mp *MediaPlaylist) CurrentlyPlaylist() *ui.MediaPlaylist {
+	return mp.currentPlaylist
 }
 
 func (mp *MediaPlaylist) getPlaylistbyID(id string) *ui.MediaPlaylist {

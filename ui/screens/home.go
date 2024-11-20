@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/rmrobinson/deskpad"
-	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
 const (
@@ -18,7 +17,7 @@ const (
 type Home struct {
 	iconImg    image.Image
 	keys       []image.Image
-	controller *controllers.Home
+	controller HomeController
 
 	screens []deskpad.Screen
 }
@@ -33,9 +32,10 @@ type HomeController interface {
 func NewHome(hc HomeController) *Home {
 	// Currently setup for a StreamDeck with 15 buttons
 	hs := &Home{
-		iconImg: loadAssetImage("assets/home-3-fill.png"),
-		keys:    make([]image.Image, 15),
-		screens: make([]deskpad.Screen, 15),
+		iconImg:    loadAssetImage("assets/home-3-fill.png"),
+		keys:       make([]image.Image, 15),
+		controller: hc,
+		screens:    make([]deskpad.Screen, 15),
 	}
 
 	hs.screens[homeClockID] = hs

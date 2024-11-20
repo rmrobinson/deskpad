@@ -24,7 +24,7 @@ type MediaPlayerSetting struct {
 	homeScreen   deskpad.Screen
 	playerScreen deskpad.Screen
 
-	audioOutputs []ui.AudioOutput
+	audioOutputs []ui.AudioOutput // keep a copy of the array to ensure a stable set when the button is pushed
 }
 
 // MediaPlayerSettingController describes the functions which this screen will use to interact with the player setting source.
@@ -67,14 +67,10 @@ func (mpss *MediaPlayerSetting) Icon() image.Image {
 	return mpss.iconImg
 }
 
-// RefreshDevices refreshes the set of devices this screen can display
-func (mpss *MediaPlayerSetting) RefreshAudioOutputs() {
-	mpss.audioOutputs = mpss.controller.GetAudioOutputs()
-	log.Printf("got %d devices\n", len(mpss.audioOutputs))
-}
-
 // Show returns the image set which will be shown to the user.
 func (mpss *MediaPlayerSetting) Show() []image.Image {
+	mpss.audioOutputs = mpss.controller.GetAudioOutputs()
+
 	for devicePos, device := range mpss.audioOutputs {
 		var deviceImg image.Image
 		if device.Type == ui.AudioOutputTypeComputer {
@@ -119,7 +115,7 @@ func (mpss *MediaPlayerSetting) KeyPressed(ctx context.Context, id int, t deskpa
 			NewScreen: mpss.playerScreen,
 		}, nil
 	} else if id == mediaPlayerSettingRefreshKeyID {
-		mpss.RefreshAudioOutputs()
+		mpss.controller.RefreshAudioOutputs(ctx)
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionRefreshScreen,
 		}, nil
