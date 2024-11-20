@@ -18,12 +18,18 @@ import (
 	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
 	bt "github.com/rmrobinson/timebox/bluetooth"
+	"github.com/rmrobinson/weather"
 	"github.com/zmb3/spotify/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
 	useMPRIS    = flag.Bool("use-mpris", false, "Should try to control using the MPRIS interface?")
 	timeboxAddr = flag.String("timebox-addr", "", "The Bluetooth address of the Timebox to control")
+	weatherAddr = flag.String("weather-addr", "", "The address of the weather service to use")
+	weatherLat  = flag.Float64("weather-lat", 0, "The latitude to specify when querying for weather")
+	weatherLon  = flag.Float64("weather-lon", 0, "The longitude to specify when querying for weather")
 )
 
 func configureSpotifyClient(ctx context.Context) *spotify.Client {
@@ -125,6 +131,64 @@ func main() {
 
 		tbConn.SetBrightness(100)
 		tbConn.SetTime(time.Now())
+
+		go func() {
+			for {
+				var opts []grpc.DialOption
+				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+				conn, err := grpc.NewClient(*weatherAddr, opts...)
+				if err != nil {
+					log.Printf("unable to connect to weather service: %s\n", err.Error())
+					continue
+				}
+				defer conn.Close()
+
+				weatherClient := weather.NewWeatherServiceClient(conn)
+				currWeather, err := weatherClient.GetCurrentReport(context.Background(), &weather.GetCurrentReportRequest{
+					Latitude:  *weatherLat,
+					Longitude: *weatherLon,
+				})
+				if err != nil {
+					log.Printf("unable to get current weather conditions: %s\n", err.Error())
+					continue
+				}
+
+				var conds timebox.WeatherCondition
+				switch currWeather.GetReport().GetConditions().SummaryIcon {
+				case weather.WeatherIcon_SUNNY:
+					conds = timebox.WeatherDarkClear
+				case weather.WeatherIcon_CLOUDY:
+					conds = timebox.WeatherDarkCloudy
+				case weather.WeatherIcon_PARTIALLY_CLOUDY:
+					conds = timebox.WeatherDarkPartiallyCoudy
+				case weather.WeatherIcon_MOSTLY_CLOUDY:
+					conds = timebox.WeatherDarkPartiallyCoudy
+				case weather.WeatherIcon_RAIN:
+					conds = timebox.WeatherDarkRain
+				case weather.WeatherIcon_CHANCE_OF_RAIN:
+					conds = timebox.WeatherDarkRain
+				case weather.WeatherIcon_SNOW:
+					conds = timebox.WeatherDarkSnow
+				case weather.WeatherIcon_CHANCE_OF_SNOW:
+					conds = timebox.WeatherDarkSnow
+				case weather.WeatherIcon_SNOW_SHOWERS:
+					conds = timebox.WeatherDarkSnow
+				case weather.WeatherIcon_THUNDERSTORMS:
+					conds = timebox.WeatherDarkRainAndLightning
+				case weather.WeatherIcon_FOG:
+					conds = timebox.WeatherDarkFog
+				default:
+					conds = timebox.WeatherSun
+				}
+
+				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
+
+				time.Sleep(time.Hour)
+
+			}
+		}()
+
 		tbc = tbConn
 	}
 

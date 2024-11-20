@@ -91,6 +91,7 @@ func (mp *MediaPlaylist) StartPlaylist(ctx context.Context, id string) {
 	if mp.mprisClient != nil {
 		log.Printf("playing URI: %s\n", id)
 		mp.mprisClient.OpenUri(id)
+		mp.mprisClient.Play()
 		mp.currentPlaylist = mp.getPlaylistbyID(id)
 	} else {
 		playlistURI := spotify.URI(id)
