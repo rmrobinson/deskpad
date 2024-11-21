@@ -11,12 +11,13 @@ import (
 	sdeck "github.com/Luzifer/streamdeck"
 	"github.com/godbus/dbus"
 	"github.com/lawl/pulseaudio"
+	"github.com/muka/go-bluetooth/bluez/profile/adapter"
 	"github.com/rmrobinson/deskpad"
 	"github.com/rmrobinson/deskpad/ui/controllers"
 	"github.com/rmrobinson/deskpad/ui/screens"
 	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
-	bt "github.com/rmrobinson/timebox/bluetooth"
+	tbbt "github.com/rmrobinson/timebox/bluetooth"
 	"github.com/rmrobinson/weather"
 	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
@@ -116,12 +117,12 @@ func main() {
 		viper.SetDefault("timebox.color.green", 255)
 		viper.SetDefault("timebox.color.blue", 66)
 
-		btAddr, err := bt.NewAddress(tbAddr)
+		btAddr, err := tbbt.NewAddress(tbAddr)
 		if err != nil {
 			log.Fatalf("invalid bluetooth address (%s): %s\n", tbAddr, err.Error())
 		}
 
-		btConn := &bt.Connection{}
+		btConn := &tbbt.Connection{}
 		err = btConn.Connect(btAddr, 4)
 		if err != nil {
 			log.Fatalf("unable to connect to bluetooth device: %s\n", err.Error())
@@ -210,6 +211,17 @@ func main() {
 		tbc = tbConn
 	}
 
+	// Set up the Bluetooth config
+	// THe adapter ID is the interface name on the system, i.e. hci0
+	var btAdapter *adapter.Adapter1
+	btAdapterID := viper.GetString("bluetooth.adapter-id")
+	if len(btAdapterID) > 0 {
+		btAdapter, err = adapter.NewAdapter1FromAdapterID(btAdapterID)
+		if err != nil {
+			log.Fatalf("unable to get bt adapter from ID %s: %s\n", btAdapterID, err.Error())
+		}
+	}
+
 	// Set up the UI
 	hc := controllers.NewHome(tbc)
 	hs := screens.NewHome(hc)
@@ -257,6 +269,10 @@ func main() {
 		sc := controllers.NewScoreboard(tbc)
 		_ = screens.NewScoreboard(hs, sc)
 	}
+
+	bs := controllers.NewBluetoothSetting(btAdapter, btAdapterID)
+	bs.RefreshDevices(ctx)
+	_ = screens.NewBluetoothSetting(hs, bs)
 
 	d := deskpad.NewDeck(sd, hs)
 
