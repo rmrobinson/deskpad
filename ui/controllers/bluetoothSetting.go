@@ -12,6 +12,10 @@ import (
 	"github.com/muka/go-bluetooth/bluez/profile/device"
 )
 
+const (
+	bluetoothRefreshTimeout = time.Second * 5
+)
+
 // BluetoothDevice represents a Bluetooth device
 type BluetoothDevice struct {
 	Address string
@@ -104,14 +108,15 @@ func (bs *BluetoothSetting) RefreshDevices(ctx context.Context) error {
 		})
 	}
 
-	discovery, cancel, err := api.Discover(bs.adapter, nil)
+	discovery, discoverCancel, err := api.Discover(bs.adapter, nil)
 	if err != nil {
 		log.Printf("error starting to discover bluetooth devices: %s\n", err.Error())
 		return err
 	}
-	defer cancel()
+	defer discoverCancel()
 
-	refreshCtx, _ := context.WithTimeout(ctx, time.Second*5)
+	refreshCtx, timeoutCancel := context.WithTimeout(ctx, bluetoothRefreshTimeout)
+	defer timeoutCancel()
 
 	for {
 		select {
