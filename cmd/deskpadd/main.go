@@ -171,6 +171,12 @@ func main() {
 				if err != nil {
 					log.Printf("unable to get current weather conditions: %s\n", err.Error())
 					continue
+				} else if currWeather.GetReport() == nil {
+					log.Printf("empty weather report\n")
+					continue
+				} else if currWeather.GetReport().GetConditions() == nil {
+					log.Printf("empty weather conditions\n")
+					continue
 				}
 
 				var conds timebox.WeatherCondition
