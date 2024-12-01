@@ -76,7 +76,12 @@ func (mps *MediaPlaylist) Show() []image.Image {
 	mps.playlists = mps.controller.GetPlaylists(12, mps.currPlaylistOffset)
 
 	for playlistPos, playlist := range mps.playlists {
-		mps.keys[playlistIdxToKeyID(playlistPos)] = resize(playlist.Icon)
+		if playlist.Icon != nil {
+			mps.keys[playlistIdxToKeyID(playlistPos)] = resize(playlist.Icon)
+		} else {
+			playlistImg := NewTextIconWithBackground(playlist.Name, loadAssetImage("assets/play-list-fill.png"))
+			mps.keys[playlistIdxToKeyID(playlistPos)] = playlistImg
+		}
 	}
 
 	for clearIdx := len(mps.playlists); clearIdx < 12; clearIdx++ {

@@ -13,6 +13,7 @@ import (
 	"github.com/lawl/pulseaudio"
 	"github.com/muka/go-bluetooth/bluez/profile/adapter"
 	"github.com/rmrobinson/deskpad"
+	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/deskpad/ui/controllers"
 	"github.com/rmrobinson/deskpad/ui/screens"
 	"github.com/rmrobinson/go-mpris"
@@ -207,6 +208,8 @@ func main() {
 					conds = timebox.WeatherSun
 				}
 
+				log.Printf("weather shows %0.2f C with condition of %d\n", currWeather.GetReport().GetConditions().Temperature, conds)
+
 				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
 
 				time.Sleep(time.Minute * 10)
@@ -226,6 +229,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("unable to get bt adapter from ID %s: %s\n", btAdapterID, err.Error())
 		}
+	}
+
+	// Retrieve any static media playlists
+	var playlists []ui.MediaPlaylist
+	if err := viper.UnmarshalKey("media-playlists", &playlists); err != nil {
+		log.Printf("unable to retrieve playlists: %s\n", err.Error())
 	}
 
 	// Set up the UI
@@ -251,7 +260,7 @@ func main() {
 	mpss.SetPlayerScreen(mps)
 	mps.SetSettingsScreen(mpss)
 
-	mplc := controllers.NewMediaPlaylist(spotifyClient, mprisClient)
+	mplc := controllers.NewMediaPlaylist(spotifyClient, mprisClient, playlists)
 	mplc.RefreshPlaylists(ctx)
 
 	mpls := screens.NewMediaPlaylist(hs, mplc)

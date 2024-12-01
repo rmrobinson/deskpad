@@ -13,7 +13,7 @@ require (
 	github.com/lawl/pulseaudio v0.0.0-20220626105240-976bed5e247c
 	github.com/muka/go-bluetooth v0.0.0-20240701044517-04c4f09c514e
 	github.com/rmrobinson/go-mpris v0.0.1
-	github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae
+	github.com/rmrobinson/timebox v0.0.0-20241201160334-75f3f72ade35
 	github.com/rmrobinson/weather v0.0.0-20241120184337-98bb2b44e201
 	github.com/spf13/viper v1.19.0
 	github.com/zmb3/spotify/v2 v2.4.2
