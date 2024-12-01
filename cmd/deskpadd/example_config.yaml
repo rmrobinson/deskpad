@@ -1,0 +1,18 @@
+use-mpris: true
+timebox:
+  addr: AA:BB:CC:DD:EE:FF
+  color:
+    red: 33
+    green: 255
+    blue: 66
+weather:
+  addr: 127.0.0.1:10101
+  latitude: 45.4240115
+  longitude: -75.7019322
+bluetooth:
+  adapter-id: hci0
+media-playlists:
+  - id: playlist:uri:123
+    name: Example playlist 1
+  - id: playlist:uri:456
+    name: Example playlist 2

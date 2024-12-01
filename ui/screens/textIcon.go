@@ -41,7 +41,7 @@ func NewTextIconWithBackground(input string, bg image.Image) image.Image {
 	charHeight := int(freetypeCtx.PointToFixed(fontSize) >> 6)
 
 	if len(input) <= rowCharCount {
-		row := freetype.Pt(getStartPoint(input), 22+charHeight)
+		row := freetype.Pt(getStartPoint(input), 15+charHeight)
 
 		if _, err := freetypeCtx.DrawString(input, row); err != nil {
 			log.Printf("unable to put string into img")
