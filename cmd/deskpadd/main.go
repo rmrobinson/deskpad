@@ -154,6 +154,8 @@ func main() {
 			viper.SetDefault("weather.longitude", 0)
 
 			for {
+				time.Sleep(time.Minute * 10)
+
 				var opts []grpc.DialOption
 				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -211,9 +213,6 @@ func main() {
 				log.Printf("weather shows %0.2f C with condition of %d\n", currWeather.GetReport().GetConditions().Temperature, conds)
 
 				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
-
-				time.Sleep(time.Minute * 10)
-
 			}
 		}()
 

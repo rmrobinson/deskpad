@@ -29,7 +29,7 @@ func spotifyClientFromToken(token *oauth2.Token) *spotify.Client {
 }
 
 func newSpotifyAuthHander(port int) *spotifyAuthHandler {
-	redirectURI := fmt.Sprintf("http://localhost:%d%s", port, completeLoginPath)
+	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, completeLoginPath)
 
 	return &spotifyAuthHandler{
 		auth: spotifyauth.New(
