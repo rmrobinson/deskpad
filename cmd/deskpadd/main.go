@@ -117,14 +117,16 @@ func main() {
 		viper.SetDefault("timebox.color.red", 0)
 		viper.SetDefault("timebox.color.green", 255)
 		viper.SetDefault("timebox.color.blue", 66)
+		viper.SetDefault("timebox.channel", 4)
 
 		btAddr, err := tbbt.NewAddress(tbAddr)
 		if err != nil {
 			log.Fatalf("invalid bluetooth address (%s): %s\n", tbAddr, err.Error())
 		}
 
+		btChann := viper.GetInt("timebox.channel")
 		btConn := &tbbt.Connection{}
-		err = btConn.Connect(btAddr, 4)
+		err = btConn.Connect(btAddr, uint8(btChann))
 		if err != nil {
 			log.Fatalf("unable to connect to bluetooth device: %s\n", err.Error())
 		}
