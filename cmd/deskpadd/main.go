@@ -42,7 +42,7 @@ func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.
 			log.Printf("failed to deserialize token: %s\n", err.Error())
 		}
 
-		log.Printf("using cached token for spotify client\n")
+		log.Printf("*** using cached token from %s for spotify client\n", tokenFilePath)
 	}
 
 	if token == nil {
@@ -63,7 +63,7 @@ func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.
 			log.Fatalf("unable to save creds to json file: %s\n", err.Error())
 		}
 
-		log.Printf("using new token for spotify client\n")
+		log.Printf("*** saved spotify token to %s; using new token for spotify client\n", tokenFilePath)
 	}
 
 	spc := spotifyClientFromToken(token)
