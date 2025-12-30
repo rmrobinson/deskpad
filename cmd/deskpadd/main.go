@@ -52,23 +52,28 @@ func main() {
 		log.Fatalf("unable to load config file: %s\n", err.Error())
 	}
 
-	// Detect and initialize the Stream Deck
-	// No point in continuing if we can't find the right hardware to use.
-	sd, err := sdeck.New(sdeck.StreamDeckOriginalV2)
-	if err != nil {
-		log.Fatalf("unable to initialize stream deck: %s\n", err.Error())
-	}
-	defer sd.Close()
+	var sd *sdeck.Client
+	if viper.GetBool("use-streamdeck") {
+		// Detect and initialize the Stream Deck
+		// No point in continuing if we can't find the right hardware to use.
+		sd, err = sdeck.New(sdeck.StreamDeckOriginalV2)
+		if err != nil {
+			log.Fatalf("unable to initialize stream deck: %s\n", err.Error())
+		}
+		defer sd.Close()
 
-	serial, err := sd.Serial()
-	if err != nil {
-		log.Fatalf("unable to get serial number: %s\n", err.Error())
-	}
-	log.Printf("*** Using stream deck '%s'\n", serial)
+		serial, err := sd.Serial()
+		if err != nil {
+			log.Fatalf("unable to get serial number: %s\n", err.Error())
+		}
+		log.Printf("*** Using stream deck '%s'\n", serial)
 
-	err = sd.ClearAllKeys()
-	if err != nil {
-		log.Fatalf("error resetting deck - consider unplugging & replugging the stream deck. Details: %s\n", err.Error())
+		err = sd.ClearAllKeys()
+		if err != nil {
+			log.Fatalf("error resetting deck - consider unplugging & replugging the stream deck. Details: %s\n", err.Error())
+		}
+	} else {
+		log.Printf("*** Stream Deck disabled\n")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
@@ -98,7 +103,7 @@ func main() {
 		}
 
 		mprisInstanceName = names[0]
-		log.Printf("*** Using MPRIS media player '%s'\n", mprisInstanceName)
+		log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
 		mprisClient = mpris.New(conn, mprisInstanceName)
 
 		paClient, err := pulseaudio.NewClient()
@@ -108,6 +113,8 @@ func main() {
 		defer paClient.Close()
 
 		pulseAudioClient = paClient
+	} else {
+		log.Printf("*** MPRIS disabled\n")
 	}
 
 	// Setup Timebox, if configured
@@ -166,13 +173,14 @@ func main() {
 					log.Printf("unable to connect to weather service: %s\n", err.Error())
 					continue
 				}
-				defer conn.Close()
 
 				weatherClient := weather.NewWeatherServiceClient(conn)
 				currWeather, err := weatherClient.GetCurrentReport(context.Background(), &weather.GetCurrentReportRequest{
 					Latitude:  viper.GetFloat64("weather.latitude"),
 					Longitude: viper.GetFloat64("weather.longitude"),
 				})
+				conn.Close()
+
 				if err != nil {
 					log.Printf("unable to get current weather conditions: %s\n", err.Error())
 					continue

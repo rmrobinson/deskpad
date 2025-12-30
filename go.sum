@@ -165,6 +165,8 @@ github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae h1:19qomZyBlT5A
 github.com/rmrobinson/timebox v0.0.0-20241117143006-ddfd0401bdae/go.mod h1:297Cr3UKQyqoyc2cn1U2X0KF/qkXdCq9GyUYYGwtBP8=
 github.com/rmrobinson/timebox v0.0.0-20241201160334-75f3f72ade35 h1:deDKt1dfq2Rh2PcffyDUWV1eAxV5oXGHT+JtONKbpsM=
 github.com/rmrobinson/timebox v0.0.0-20241201160334-75f3f72ade35/go.mod h1:Spb5jAyCDbIqAEFUGzQt5mIvbbsK8z5iOhLr/zJ7mkM=
+github.com/rmrobinson/timebox v0.0.0-20251230134523-2105608e9a96 h1:ZmrhKuTobgj6SNOfuwWDM+tVp+Skv63VRgawJ+aSFKE=
+github.com/rmrobinson/timebox v0.0.0-20251230134523-2105608e9a96/go.mod h1:Spb5jAyCDbIqAEFUGzQt5mIvbbsK8z5iOhLr/zJ7mkM=
 github.com/rmrobinson/weather v0.0.0-20241120184337-98bb2b44e201 h1:ePgEzyxHyYnt2YnkGCuRTCZ3LqoejZfsCfGSKWBazg0=
 github.com/rmrobinson/weather v0.0.0-20241120184337-98bb2b44e201/go.mod h1:kjhc84VBqKAqcp5LXj8OylMACy2uNYK9hJDNQBS7iQY=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
