@@ -1,4 +1,5 @@
 use-mpris: true
+use-streamdeck: true
 timebox:
   addr: AA:BB:CC:DD:EE:FF
   color:
