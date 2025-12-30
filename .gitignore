@@ -23,3 +23,7 @@ go.work.sum
 
 # env file
 .env
+
+# deskpad configs
+deskpad.yaml
+token.json

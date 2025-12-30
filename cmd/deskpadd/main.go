@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -22,13 +24,47 @@ import (
 	"github.com/rmrobinson/weather"
 	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func configureSpotifyClient(ctx context.Context) *spotify.Client {
-	sth := newSpotifyAuthHander(8037)
-	token := sth.Token(ctx)
+func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.Client {
+	tokenFile, err := os.ReadFile(tokenFilePath)
+	var token *oauth2.Token
+
+	if err == nil {
+		var t oauth2.Token
+		err = json.Unmarshal(tokenFile, &t)
+		if err == nil {
+			token = &t
+		} else {
+			log.Printf("failed to deserialize token: %s\n", err.Error())
+		}
+
+		log.Printf("*** using cached token from %s for spotify client\n", tokenFilePath)
+	}
+
+	if token == nil {
+		sth := newSpotifyAuthHander(8037)
+		token = sth.Token(ctx)
+
+		if token == nil {
+			log.Fatalf("unable to get spotify token: %s\n", err.Error())
+		}
+
+		tokenStr, err := json.Marshal(token)
+		if err != nil {
+			log.Fatalf("unable to marshal token to string: %s\n", err.Error())
+		}
+
+		err = os.WriteFile(tokenFilePath, tokenStr, 0600)
+		if err != nil {
+			log.Fatalf("unable to save creds to json file: %s\n", err.Error())
+		}
+
+		log.Printf("*** saved spotify token to %s; using new token for spotify client\n", tokenFilePath)
+	}
 
 	spc := spotifyClientFromToken(token)
 
@@ -81,7 +117,7 @@ func main() {
 
 	// Setup Spotify. This is used as the playlist provider; and if not using the Linux MPRIS interface
 	// it will also be used to control media playback.
-	spotifyClient := configureSpotifyClient(ctx)
+	spotifyClient := configureSpotifyClient(ctx, "token.json")
 
 	var mprisClient *mpris.Player
 	var mprisInstanceName string
