@@ -20,6 +20,9 @@
 [ ] when a new song starts playing, scroll the song name on the Timebox
 [ ] allow an icon for a playlist to be specified
 
+## Playback features
+[ ] when playing a spotify playlist, launch from a goroutine to avoid blocking the screen
+
 ## Known Bugs
 [ ] Bluetooth client displays some errors - maybe fork and fix the repo?
 [ ] shuffle/loop changing isn't working - fix the mpris client library
