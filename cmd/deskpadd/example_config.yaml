@@ -1,5 +1,8 @@
 use-mpris: true
 use-streamdeck: true
+web:
+  addr: :1337
+  auth-token: change-me
 timebox:
   addr: AA:BB:CC:DD:EE:FF
   color:

@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>deskpad</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101214;
+      --panel: #191d20;
+      --key: #08090a;
+      --key-border: #30363b;
+      --text: #f4f5f5;
+      --muted: #9ba3a8;
+      --accent: #5fc48d;
+      --error: #ff8178;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    main {
+      width: min(100%, 520px);
+      display: grid;
+      gap: 18px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    #status {
+      color: var(--muted);
+      font-size: 13px;
+      min-height: 18px;
+      text-align: right;
+    }
+
+    .deck {
+      background: var(--panel);
+      border: 1px solid #2a3034;
+      border-radius: 8px;
+      padding: 18px;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      box-shadow: 0 18px 42px rgb(0 0 0 / 0.28);
+    }
+
+    .key {
+      border: 1px solid var(--key-border);
+      border-radius: 8px;
+      background: var(--key);
+      aspect-ratio: 1;
+      min-width: 0;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .key:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .key[data-active="true"] {
+      border-color: var(--accent);
+      transform: translateY(1px);
+    }
+
+    .key img {
+      width: 72%;
+      height: 72%;
+      object-fit: contain;
+      pointer-events: none;
+      image-rendering: auto;
+    }
+
+    .auth {
+      display: grid;
+      gap: 8px;
+    }
+
+    .token-field {
+      position: relative;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input {
+      display: block;
+      width: 100%;
+      border: 1px solid #343b40;
+      border-radius: 6px;
+      background: #0b0d0e;
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    .system-status {
+      border: 1px solid #2a3034;
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .system-status__heading {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .media-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .media-status__body {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .media-status__state {
+      color: var(--accent);
+      font-size: 12px;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .media-status__title,
+    .media-status__artists,
+    .media-status__album {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .media-status__title {
+      font-size: 15px;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .media-status__artists,
+    .media-status__album {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .media-status__art {
+      width: clamp(44px, 16vw, 64px);
+      height: clamp(44px, 16vw, 64px);
+      max-width: 22%;
+      object-fit: cover;
+      border-radius: 4px;
+      flex: 0 0 auto;
+      background: #0b0d0e;
+    }
+
+    @media (max-width: 420px) {
+      body {
+        padding: 14px;
+      }
+
+      .deck {
+        gap: 8px;
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1 id="screen">deskpad</h1>
+      <div id="status">read-only</div>
+    </header>
+    <section id="deck" class="deck" aria-label="Control surface"></section>
+    <form class="auth" autocomplete="on">
+      <label for="token">Write token</label>
+      <div class="token-field">
+        <input id="token" name="auth-token" type="password" autocomplete="current-password" autocapitalize="none" spellcheck="false">
+      </div>
+    </form>
+    <section class="system-status" aria-live="polite">
+      <h2 class="system-status__heading">Deskpad status</h2>
+      <div id="mediaStatus" class="media-status"></div>
+    </section>
+  </main>
+
+  <script>
+    const deck = document.getElementById("deck");
+    const screenName = document.getElementById("screen");
+    const statusEl = document.getElementById("status");
+    const authForm = document.querySelector(".auth");
+    const tokenInput = document.getElementById("token");
+    const mediaStatus = document.getElementById("mediaStatus");
+    const longPressMs = 500;
+    const statusRefreshMs = 2000;
+    let token = localStorage.getItem("deskpad.authToken") || "";
+    let longPressTimer = null;
+    let longPressSent = false;
+
+    tokenInput.value = token;
+    setStatus(token ? "ready" : "read-only");
+
+    authForm.addEventListener("submit", (event) => event.preventDefault());
+
+    tokenInput.addEventListener("input", () => {
+      token = tokenInput.value.trim();
+      if (token) {
+        localStorage.setItem("deskpad.authToken", token);
+        setStatus("ready");
+      } else {
+        localStorage.removeItem("deskpad.authToken");
+        setStatus("read-only");
+      }
+      updateDisabledState();
+    });
+
+    function setStatus(text, error = false) {
+      statusEl.textContent = text;
+      statusEl.style.color = error ? "var(--error)" : "var(--muted)";
+    }
+
+    function updateDisabledState() {
+      deck.querySelectorAll(".key").forEach((button) => {
+        button.disabled = !token;
+      });
+    }
+
+    function render(state) {
+      screenName.textContent = state.currentScreen.name;
+      deck.style.gridTemplateColumns = `repeat(${state.grid.columns}, 1fr)`;
+      deck.replaceChildren();
+
+      state.keys.forEach((src, index) => {
+        const button = document.createElement("button");
+        button.className = "key";
+        button.type = "button";
+        button.dataset.key = index;
+        button.disabled = !token;
+        button.setAttribute("aria-label", `Key ${index + 1}`);
+
+        if (src) {
+          const img = document.createElement("img");
+          img.alt = "";
+          img.src = src;
+          button.appendChild(img);
+        }
+
+        button.addEventListener("pointerdown", onPointerDown);
+        button.addEventListener("pointerup", onPointerUp);
+        button.addEventListener("pointercancel", clearPress);
+        button.addEventListener("pointerleave", clearPress);
+        deck.appendChild(button);
+      });
+      notifyLayoutChanged();
+    }
+
+    function renderDeskpadStatus(status) {
+      const player = status.mediaPlayer || {};
+      const item = player.currentlyPlaying;
+      const state = player.state || "Unavailable";
+      const stateText = document.createElement("div");
+      stateText.className = "media-status__state";
+      stateText.textContent = state;
+
+      const body = document.createElement("div");
+      body.className = "media-status__body";
+      body.appendChild(stateText);
+
+      if (item && state.toLowerCase() === "playing") {
+        const title = document.createElement("div");
+        title.className = "media-status__title";
+        title.textContent = item.title || "Unknown title";
+        body.appendChild(title);
+
+        const artists = document.createElement("div");
+        artists.className = "media-status__artists";
+        artists.textContent = Array.isArray(item.artists) && item.artists.length
+          ? item.artists.join(", ")
+          : "Unknown artist";
+        body.appendChild(artists);
+
+        if (item.albumName) {
+          const album = document.createElement("div");
+          album.className = "media-status__album";
+          album.textContent = item.albumName;
+          body.appendChild(album);
+        }
+      }
+
+      mediaStatus.replaceChildren(body);
+
+      if (item && item.albumArtUrl && state.toLowerCase() === "playing") {
+        const art = document.createElement("img");
+        art.className = "media-status__art";
+        art.alt = "";
+        art.src = item.albumArtUrl;
+        art.addEventListener("load", notifyLayoutChanged, { once: true });
+        mediaStatus.appendChild(art);
+      }
+      notifyLayoutChanged();
+    }
+
+    function notifyLayoutChanged() {
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+        window.dispatchEvent(new Event("scroll"));
+      });
+    }
+
+    function onPointerDown(event) {
+      const button = event.currentTarget;
+      if (!token || button.disabled) {
+        setStatus("enter token");
+        return;
+      }
+
+      button.setPointerCapture(event.pointerId);
+      button.dataset.active = "true";
+      longPressSent = false;
+      longPressTimer = window.setTimeout(() => {
+        longPressSent = true;
+        sendPress(button.dataset.key, "long");
+        clearPress(event);
+      }, longPressMs);
+    }
+
+    function onPointerUp(event) {
+      const button = event.currentTarget;
+      if (!token || button.disabled) {
+        return;
+      }
+
+      if (!longPressSent) {
+        sendPress(button.dataset.key, "short");
+      }
+      clearPress(event);
+    }
+
+    function clearPress(event) {
+      window.clearTimeout(longPressTimer);
+      longPressTimer = null;
+      const button = event.currentTarget;
+      if (button) {
+        button.dataset.active = "false";
+      }
+    }
+
+    async function sendPress(key, type) {
+      try {
+        const response = await fetch(`/api/ui/keys/${key}/press`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ type })
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          setStatus(body.trim() || `press failed: ${response.status}`, true);
+          return;
+        }
+
+        setStatus("ready");
+      } catch (err) {
+        setStatus("offline", true);
+      }
+    }
+
+    async function loadInitialState() {
+      const response = await fetch("/api/ui/state");
+      render(await response.json());
+    }
+
+    async function loadDeskpadStatus() {
+      const response = await fetch("/status");
+      if (!response.ok) {
+        throw new Error(`status ${response.status}`);
+      }
+      renderDeskpadStatus(await response.json());
+    }
+
+    function startStatusRefresh() {
+      loadDeskpadStatus().catch(() => {
+        mediaStatus.replaceChildren();
+        const body = document.createElement("div");
+        body.className = "media-status__body";
+        const state = document.createElement("div");
+        state.className = "media-status__state";
+        state.textContent = "Offline";
+        body.appendChild(state);
+        mediaStatus.appendChild(body);
+      });
+      window.setInterval(() => loadDeskpadStatus().catch(() => {}), statusRefreshMs);
+    }
+
+    function subscribe() {
+      const source = new EventSource("/api/ui/events");
+      source.onmessage = (event) => render(JSON.parse(event.data));
+      source.onerror = () => setStatus("reconnecting", true);
+      source.onopen = () => setStatus(token ? "ready" : "read-only");
+    }
+
+    loadInitialState().catch(() => setStatus("offline", true));
+    startStatusRefresh();
+    subscribe();
+  </script>
+</body>
+</html>

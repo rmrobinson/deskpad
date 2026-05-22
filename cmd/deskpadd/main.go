@@ -82,6 +82,7 @@ func main() {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("$HOME/.deskpad")
 	viper.AddConfigPath(".")
+	viper.SetDefault("web.addr", ":1337")
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -289,13 +290,16 @@ func main() {
 	var mps *screens.MediaPlayer
 	var linuxMpc *controllers.LinuxMediaPlayer
 	var spotifyMpc *controllers.SpotifyMediaPlayer
+	var apiMPC MediaPlayerController
 
 	if mprisClient != nil && pulseAudioClient != nil {
 		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, mprisInstanceName, pulseAudioClient)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
+		apiMPC = linuxMpc
 	} else {
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
 		mps = screens.NewMediaPlayer(hs, spotifyMpc)
+		apiMPC = spotifyMpc
 	}
 
 	mpsc := controllers.NewMediaPlayerSetting(spotifyClient, pulseAudioClient)
@@ -334,23 +338,46 @@ func main() {
 	bs.RefreshDevices(ctx)
 	_ = screens.NewBluetoothSetting(hs, bs)
 
-	d := deskpad.NewDeck(sd, hs)
+	d := deskpad.NewDeck(hs)
+	var streamDeckSurface *deskpad.StreamDeckSurface
+	if sd != nil {
+		streamDeckSurface = deskpad.NewStreamDeckSurface(sd)
+		d.RegisterSurface(streamDeckSurface)
+	}
+
+	webSurface := deskpad.NewWebSurface()
+	d.RegisterSurface(webSurface)
+	d.RefreshScreen()
+
+	if streamDeckSurface != nil {
+		go streamDeckSurface.Run(ctx, d)
+	}
 
 	// Set up the API
 	go func() {
 		api := &API{
-			mpc:  linuxMpc,
-			mplc: mplc,
-			mpsc: mpsc,
-			d:    d,
+			mpc:       apiMPC,
+			mplc:      mplc,
+			mpsc:      mpsc,
+			d:         d,
+			web:       webSurface,
+			authToken: viper.GetString("web.auth-token"),
 		}
 
 		mux := http.NewServeMux()
+		mux.HandleFunc("/", api.Index)
 		mux.HandleFunc("/status", api.Status)
+		mux.HandleFunc("/api/ui/state", api.UIState)
+		mux.HandleFunc("/api/ui/events", api.UIEvents)
+		mux.HandleFunc("/api/ui/keys/", api.UIPressKey)
 
-		log.Printf("starting http api\n")
-		http.ListenAndServe(":1337", mux)
+		addr := viper.GetString("web.addr")
+		log.Printf("starting http api on %s\n", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
+			log.Printf("http api stopped: %s\n", err.Error())
+		}
 	}()
 
-	d.Run(ctx)
+	<-ctx.Done()
+	d.Clear()
 }
