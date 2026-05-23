@@ -2,12 +2,13 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
+	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
@@ -18,8 +19,8 @@ import (
 	"github.com/rmrobinson/deskpad/ui/controllers"
 )
 
-//go:embed web/index.html
-var webIndexHTML []byte
+//go:embed web/index.html web/manifest.webmanifest web/service-worker.js web/icons/*.png
+var webFiles embed.FS
 
 type MediaItem struct {
 	ID          string   `json:"id"`
@@ -172,7 +173,46 @@ func (a *API) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(webIndexHTML)
+	serveEmbeddedFile(w, "web/index.html")
+}
+
+func (a *API) WebAsset(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/manifest.webmanifest":
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/manifest+json")
+		serveEmbeddedFile(w, "web/manifest.webmanifest")
+
+	case r.URL.Path == "/service-worker.js":
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		serveEmbeddedFile(w, "web/service-worker.js")
+
+	case strings.HasPrefix(r.URL.Path, "/icons/"):
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		webRoot, err := fs.Sub(webFiles, "web")
+		if err != nil {
+			http.Error(w, "unable to load web assets", http.StatusInternalServerError)
+			return
+		}
+		http.FileServer(http.FS(webRoot)).ServeHTTP(w, r)
+
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 func (a *API) UIState(w http.ResponseWriter, r *http.Request) {
@@ -333,4 +373,14 @@ func imageDataURL(img image.Image) (string, error) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func serveEmbeddedFile(w http.ResponseWriter, name string) {
+	data, err := webFiles.ReadFile(name)
+	if err != nil {
+		http.Error(w, "unable to load web asset", http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(data)
 }

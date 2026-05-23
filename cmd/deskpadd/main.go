@@ -366,6 +366,9 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", api.Index)
+		mux.HandleFunc("/manifest.webmanifest", api.WebAsset)
+		mux.HandleFunc("/service-worker.js", api.WebAsset)
+		mux.HandleFunc("/icons/", api.WebAsset)
 		mux.HandleFunc("/status", api.Status)
 		mux.HandleFunc("/api/ui/state", api.UIState)
 		mux.HandleFunc("/api/ui/events", api.UIEvents)

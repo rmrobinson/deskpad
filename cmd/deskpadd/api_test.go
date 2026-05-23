@@ -155,6 +155,35 @@ func TestStatusReturnsMediaPlayerDetails(t *testing.T) {
 	}
 }
 
+func TestWebAssetServesPWAAssets(t *testing.T) {
+	api := &API{}
+
+	for _, tc := range []struct {
+		path        string
+		contentType string
+	}{
+		{path: "/manifest.webmanifest", contentType: "application/manifest+json"},
+		{path: "/service-worker.js", contentType: "application/javascript"},
+		{path: "/icons/icon-192.png", contentType: "image/png"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+			api.WebAsset(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if !strings.HasPrefix(rec.Header().Get("Content-Type"), tc.contentType) {
+				t.Fatalf("content type = %q, want prefix %q", rec.Header().Get("Content-Type"), tc.contentType)
+			}
+			if rec.Body.Len() == 0 {
+				t.Fatalf("response body is empty")
+			}
+		})
+	}
+}
+
 func TestUIEventsReceivesInitialSnapshotAndUpdate(t *testing.T) {
 	updated := apiTestImage()
 	screen := &apiTestScreen{
