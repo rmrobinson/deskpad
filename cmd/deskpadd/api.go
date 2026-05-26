@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rmrobinson/deskpad"
 	"github.com/rmrobinson/deskpad/ui"
@@ -173,6 +174,7 @@ func (a *API) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	serveEmbeddedFile(w, "web/index.html")
 }
 
@@ -194,6 +196,7 @@ func (a *API) WebAsset(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Service-Worker-Allowed", "/")
 		serveEmbeddedFile(w, "web/service-worker.js")
 
@@ -249,14 +252,21 @@ func (a *API) UIEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	events, cancel := a.web.Subscribe()
 	defer cancel()
+
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeat.C:
+			fmt.Fprint(w, ": heartbeat\n\n")
+			flusher.Flush()
 		case snapshot, ok := <-events:
 			if !ok {
 				return
@@ -322,10 +332,13 @@ func (a *API) UIPressKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("web key press received: key=%d type=%s screen=%q\n", keyID, req.Type, a.d.Screen().Name())
 	if err := a.d.PressKey(r.Context(), keyID, pressType); err != nil {
+		log.Printf("web key press failed: key=%d type=%s error=%s\n", keyID, req.Type, err.Error())
 		http.Error(w, "press failed", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("web key press handled: key=%d type=%s\n", keyID, req.Type)
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -249,6 +249,7 @@
     let token = localStorage.getItem("deskpad.authToken") || "";
     let longPressTimer = null;
     let longPressSent = false;
+    let streamStatusTimer = null;
 
     tokenInput.value = token;
     setStatus(token ? "ready" : "read-only");
@@ -415,6 +416,7 @@
           return;
         }
 
+        await loadInitialState();
         setStatus("ready");
       } catch (err) {
         setStatus("offline", true);
@@ -450,16 +452,38 @@
 
     function subscribe() {
       const source = new EventSource("/api/ui/events");
-      source.onmessage = (event) => render(JSON.parse(event.data));
-      source.onerror = () => setStatus("reconnecting", true);
-      source.onopen = () => setStatus(token ? "ready" : "read-only");
+      source.onmessage = (event) => {
+        clearStreamStatusTimer();
+        render(JSON.parse(event.data));
+      };
+      source.onerror = () => {
+        clearStreamStatusTimer();
+        streamStatusTimer = window.setTimeout(() => {
+          if (source.readyState !== EventSource.OPEN) {
+            setStatus("screen stream disconnected", true);
+          }
+        }, 3000);
+      };
+      source.onopen = () => {
+        clearStreamStatusTimer();
+        setStatus(token ? "ready" : "read-only");
+      };
+    }
+
+    function clearStreamStatusTimer() {
+      if (streamStatusTimer) {
+        window.clearTimeout(streamStatusTimer);
+        streamStatusTimer = null;
+      }
     }
 
     loadInitialState().catch(() => setStatus("offline", true));
     startStatusRefresh();
     subscribe();
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+      navigator.serviceWorker.register("/service-worker.js")
+        .then((registration) => registration.update())
+        .catch(() => {});
     }
   </script>
 </body>

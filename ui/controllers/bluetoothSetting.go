@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
-	"github.com/muka/go-bluetooth/api"
 	"github.com/muka/go-bluetooth/bluez/profile/adapter"
 	"github.com/muka/go-bluetooth/bluez/profile/agent"
 	"github.com/muka/go-bluetooth/bluez/profile/device"
@@ -108,8 +108,13 @@ func (bs *BluetoothSetting) RefreshDevices(ctx context.Context) error {
 		})
 	}
 
-	discovery, discoverCancel, err := api.Discover(bs.adapter, nil)
+	discovery, discoverCancel, err := bs.startDiscovery()
 	if err != nil {
+		if isBluetoothDiscoveryInProgress(err) {
+			log.Printf("bluetooth discovery already in progress; using known devices only\n")
+			return nil
+		}
+
 		log.Printf("error starting to discover bluetooth devices: %s\n", err.Error())
 		return err
 	}
@@ -141,4 +146,41 @@ func (bs *BluetoothSetting) RefreshDevices(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func (bs *BluetoothSetting) startDiscovery() (<-chan *adapter.DeviceDiscovered, func(), error) {
+	if err := bs.adapter.SetPairable(false); err != nil {
+		return nil, nil, err
+	}
+	if err := bs.adapter.SetDiscoverable(false); err != nil {
+		return nil, nil, err
+	}
+	if err := bs.adapter.SetPowered(true); err != nil {
+		return nil, nil, err
+	}
+	if err := bs.adapter.SetDiscoveryFilter(map[string]interface{}{}); err != nil {
+		return nil, nil, err
+	}
+	if err := bs.adapter.StartDiscovery(); err != nil {
+		return nil, nil, err
+	}
+
+	discovery, discoveryCancel, err := bs.adapter.OnDeviceDiscovered()
+	if err != nil {
+		_ = bs.adapter.StopDiscovery()
+		return nil, nil, err
+	}
+
+	cancel := func() {
+		if err := bs.adapter.StopDiscovery(); err != nil && !isBluetoothDiscoveryInProgress(err) {
+			log.Printf("error stopping bluetooth discovery: %s\n", err.Error())
+		}
+		discoveryCancel()
+	}
+
+	return discovery, cancel, nil
+}
+
+func isBluetoothDiscoveryInProgress(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Operation already in progress")
 }

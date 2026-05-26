@@ -36,21 +36,26 @@ func (m *LinuxMediaPlayer) ID() string {
 }
 
 func (m *LinuxMediaPlayer) Play() {
+	log.Printf("mpris %s: Play\n", m.mprisInstanceName)
 	m.mprisClient.Play()
 }
 func (m *LinuxMediaPlayer) Pause() {
+	log.Printf("mpris %s: Pause\n", m.mprisInstanceName)
 	m.mprisClient.Pause()
 }
 func (m *LinuxMediaPlayer) Next() {
+	log.Printf("mpris %s: Next\n", m.mprisInstanceName)
 	m.mprisClient.Next()
 }
 func (m *LinuxMediaPlayer) Previous() {
+	log.Printf("mpris %s: Previous\n", m.mprisInstanceName)
 	m.mprisClient.Previous()
 }
 func (m *LinuxMediaPlayer) FastForward() {
 	pos := m.mprisClient.GetPosition()
 
 	newPos := pos + 10000
+	log.Printf("mpris %s: SeekTo fast-forward from %d to %d\n", m.mprisInstanceName, pos, newPos)
 	m.mprisClient.SeekTo(newPos)
 }
 func (m *LinuxMediaPlayer) Rewind() {
@@ -60,6 +65,7 @@ func (m *LinuxMediaPlayer) Rewind() {
 	if newPos < 0 {
 		newPos = 0
 	}
+	log.Printf("mpris %s: SeekTo rewind from %d to %d\n", m.mprisInstanceName, pos, newPos)
 	m.mprisClient.SeekTo(newPos)
 
 }
@@ -100,6 +106,7 @@ func (m *LinuxMediaPlayer) Unmute() {
 }
 
 func (m *LinuxMediaPlayer) Shuffle(shuffle bool) {
+	log.Printf("mpris %s: SetShuffle %t\n", m.mprisInstanceName, shuffle)
 	m.mprisClient.SetShuffle(shuffle)
 }
 

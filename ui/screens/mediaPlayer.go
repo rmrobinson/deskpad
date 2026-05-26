@@ -145,15 +145,17 @@ func (mps *MediaPlayer) KeyPressed(ctx context.Context, id int, t deskpad.KeyPre
 	} else if id == mediaPlayerShuffleLoopKeyID {
 		if mps.controller.IsShuffle() {
 			mps.controller.Shuffle(false)
-			return deskpad.KeyPressAction{
-				Action:  deskpad.KeyPressActionUpdateIcon,
-				NewIcon: mps.loopImg,
-			}, nil
-		} else {
-			mps.controller.Shuffle(true)
+			mps.keys[mediaPlayerShuffleLoopKeyID] = mps.shuffleImg
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.shuffleImg,
+			}, nil
+		} else {
+			mps.controller.Shuffle(true)
+			mps.keys[mediaPlayerShuffleLoopKeyID] = mps.loopImg
+			return deskpad.KeyPressAction{
+				Action:  deskpad.KeyPressActionUpdateIcon,
+				NewIcon: mps.loopImg,
 			}, nil
 		}
 	} else if id == mediaPlayerRewindKeyID {
@@ -163,14 +165,18 @@ func (mps *MediaPlayer) KeyPressed(ctx context.Context, id int, t deskpad.KeyPre
 		}, nil
 	} else if id == mediaPlayerPlayPauseKeyID {
 		if mps.controller.IsPlaying() {
+			log.Print("media player screen: play/pause key pressed; pausing playback\n")
 			mps.controller.Pause()
+			mps.keys[mediaPlayerPlayPauseKeyID] = mps.playImg
 
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.playImg,
 			}, nil
 		} else {
+			log.Print("media player screen: play/pause key pressed; starting playback\n")
 			mps.controller.Play()
+			mps.keys[mediaPlayerPlayPauseKeyID] = mps.pauseImg
 			return deskpad.KeyPressAction{
 				Action:  deskpad.KeyPressActionUpdateIcon,
 				NewIcon: mps.pauseImg,

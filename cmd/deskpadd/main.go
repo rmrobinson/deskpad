@@ -198,34 +198,60 @@ func main() {
 
 			viper.SetDefault("weather.latitude", 0)
 			viper.SetDefault("weather.longitude", 0)
+			weatherInterval := time.Minute * 10
+			weatherAddr := viper.GetString("weather.addr")
+			latitude := viper.GetFloat64("weather.latitude")
+			longitude := viper.GetFloat64("weather.longitude")
+			log.Printf("checking weather from %s every %s for lat=%0.4f lon=%0.4f\n", weatherAddr, weatherInterval, latitude, longitude)
+			waitWeatherInterval := func() bool {
+				select {
+				case <-ctx.Done():
+					return false
+				case <-time.After(weatherInterval):
+					return true
+				}
+			}
 
 			for {
-				time.Sleep(time.Minute * 10)
-
 				var opts []grpc.DialOption
 				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-				conn, err := grpc.NewClient(viper.GetString("weather.addr"), opts...)
+				log.Printf("retrieving current weather from %s\n", weatherAddr)
+				conn, err := grpc.NewClient(weatherAddr, opts...)
 				if err != nil {
 					log.Printf("unable to connect to weather service: %s\n", err.Error())
+					if !waitWeatherInterval() {
+						return
+					}
 					continue
 				}
 
 				weatherClient := weather.NewWeatherServiceClient(conn)
-				currWeather, err := weatherClient.GetCurrentReport(context.Background(), &weather.GetCurrentReportRequest{
-					Latitude:  viper.GetFloat64("weather.latitude"),
-					Longitude: viper.GetFloat64("weather.longitude"),
+				weatherCtx, cancel := context.WithTimeout(ctx, time.Second*30)
+				currWeather, err := weatherClient.GetCurrentReport(weatherCtx, &weather.GetCurrentReportRequest{
+					Latitude:  latitude,
+					Longitude: longitude,
 				})
+				cancel()
 				conn.Close()
 
 				if err != nil {
 					log.Printf("unable to get current weather conditions: %s\n", err.Error())
+					if !waitWeatherInterval() {
+						return
+					}
 					continue
 				} else if currWeather.GetReport() == nil {
 					log.Printf("empty weather report\n")
+					if !waitWeatherInterval() {
+						return
+					}
 					continue
 				} else if currWeather.GetReport().GetConditions() == nil {
 					log.Printf("empty weather conditions\n")
+					if !waitWeatherInterval() {
+						return
+					}
 					continue
 				}
 
@@ -260,6 +286,9 @@ func main() {
 				log.Printf("weather shows %0.2f C with condition of %d\n", currWeather.GetReport().GetConditions().Temperature, conds)
 
 				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
+				if !waitWeatherInterval() {
+					return
+				}
 			}
 		}()
 
