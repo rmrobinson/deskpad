@@ -129,7 +129,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		defer conn.Close()
 		mprisConn = conn
 
 		names, err := mpris.List(conn)
@@ -137,19 +136,24 @@ func main() {
 			panic(err)
 		}
 		if len(names) == 0 {
-			log.Fatal("No media player found.")
+			log.Printf("*** No MPRIS media player found; falling back to Spotify playback control\n")
+			conn.Close()
+			mprisConn = nil
+		} else {
+			mprisInstanceName = names[0]
+			log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
+
+			paClient, err := pulseaudio.NewClient()
+			if err != nil {
+				log.Printf("error connecting to pulseaudio; falling back to Spotify playback control: %s\n", err.Error())
+				conn.Close()
+				mprisConn = nil
+			} else {
+				defer conn.Close()
+				defer paClient.Close()
+				pulseAudioClient = paClient
+			}
 		}
-
-		mprisInstanceName = names[0]
-		log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
-
-		paClient, err := pulseaudio.NewClient()
-		if err != nil {
-			log.Fatalf("error connecting to pulseaudio: %s\n", err.Error())
-		}
-		defer paClient.Close()
-
-		pulseAudioClient = paClient
 	} else {
 		log.Printf("*** MPRIS disabled\n")
 	}

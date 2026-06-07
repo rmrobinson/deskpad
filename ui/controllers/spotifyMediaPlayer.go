@@ -8,6 +8,8 @@ import (
 	"github.com/zmb3/spotify/v2"
 )
 
+const spotifyMediaPlayerVolumeStep = 5
+
 // SpotifyMediaPlayer uses the Spotify web API to control media playback of a supported device.
 // It supports the MediaPlayerController interface for playback control.
 type SpotifyMediaPlayer struct {
@@ -172,7 +174,7 @@ func (mp *SpotifyMediaPlayer) VolumeUp() {
 		return
 	}
 
-	newVolume := int(state.Device.Volume) + 10
+	newVolume := int(state.Device.Volume) + spotifyMediaPlayerVolumeStep
 	if newVolume > 100 {
 		newVolume = 100
 	}
@@ -189,9 +191,9 @@ func (mp *SpotifyMediaPlayer) VolumeDown() {
 		return
 	}
 
-	newVolume := int(state.Device.Volume) - 10
-	if newVolume > 100 {
-		newVolume = 100
+	newVolume := int(state.Device.Volume) - spotifyMediaPlayerVolumeStep
+	if newVolume < 0 {
+		newVolume = 0
 	}
 
 	if err := mp.client.Volume(mp.ctx, newVolume); err != nil {

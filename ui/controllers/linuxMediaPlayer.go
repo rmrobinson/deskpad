@@ -13,6 +13,8 @@ import (
 	"github.com/rmrobinson/go-mpris"
 )
 
+const linuxMediaPlayerVolumeStep = 0.05
+
 // LinuxMediaPlayer uses the DBus MPRIS interface to control a media agent running on the local machine,
 // and PulseAudio to control the output audio device settings.
 // This supports the MediaPlayerController interface for audio control. It currently doesn't support listing
@@ -119,7 +121,7 @@ func (m *LinuxMediaPlayer) VolumeUp() {
 		return
 	}
 
-	v += 0.1
+	v += linuxMediaPlayerVolumeStep
 	if v > 1.0 {
 		v = 1.0
 	}
@@ -133,7 +135,7 @@ func (m *LinuxMediaPlayer) VolumeDown() {
 		return
 	}
 
-	v -= 0.1
+	v -= linuxMediaPlayerVolumeStep
 	if v < 0 {
 		v = 0
 	}
