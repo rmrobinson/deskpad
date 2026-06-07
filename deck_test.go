@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"testing"
+	"time"
 )
 
 type fakeScreen struct {
@@ -14,6 +15,7 @@ type fakeScreen struct {
 	pressedKey  int
 	pressedType KeyPressType
 	action      KeyPressAction
+	keyPressed  func(context.Context, int, KeyPressType) (KeyPressAction, error)
 }
 
 func (s *fakeScreen) Name() string {
@@ -30,6 +32,10 @@ func (s *fakeScreen) Icon() image.Image {
 }
 
 func (s *fakeScreen) KeyPressed(ctx context.Context, id int, t KeyPressType) (KeyPressAction, error) {
+	if s.keyPressed != nil {
+		return s.keyPressed(ctx, id, t)
+	}
+
 	s.pressedKey = id
 	s.pressedType = t
 	return s.action, nil
@@ -170,6 +176,7 @@ func TestDeckGeometryUsesStreamDeckKeyCount(t *testing.T) {
 		{name: "original", keyCount: 15, wantRows: 3, wantColumns: 5},
 		{name: "six key", keyCount: 6, wantRows: 2, wantColumns: 3},
 		{name: "four key", keyCount: 4, wantRows: 2, wantColumns: 2},
+		{name: "non divisible", keyCount: 32, wantRows: 3, wantColumns: 11},
 		{name: "fallback", keyCount: 0, wantRows: 3, wantColumns: 5},
 	}
 
@@ -180,6 +187,50 @@ func TestDeckGeometryUsesStreamDeckKeyCount(t *testing.T) {
 				t.Fatalf("geometry = %dx%d, want %dx%d", rows, columns, tc.wantRows, tc.wantColumns)
 			}
 		})
+	}
+}
+
+func TestSnapshotDoesNotBlockOnSlowKeyPress(t *testing.T) {
+	keyStarted := make(chan struct{})
+	releaseKey := make(chan struct{})
+	screen := &fakeScreen{
+		name: "home",
+		keyPressed: func(ctx context.Context, id int, t KeyPressType) (KeyPressAction, error) {
+			close(keyStarted)
+			<-releaseKey
+			return KeyPressAction{Action: KeyPressActionNoop}, nil
+		},
+	}
+	deck := NewDeck(screen)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- deck.PressKey(context.Background(), 0, KeyPressShort)
+	}()
+
+	select {
+	case <-keyStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for key press to start")
+	}
+
+	snapshotDone := make(chan Snapshot, 1)
+	go func() {
+		snapshotDone <- deck.Snapshot()
+	}()
+
+	select {
+	case snapshot := <-snapshotDone:
+		if snapshot.ScreenName != "home" {
+			t.Fatalf("snapshot screen = %q, want home", snapshot.ScreenName)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Snapshot blocked behind key press")
+	}
+
+	close(releaseKey)
+	if err := <-done; err != nil {
+		t.Fatalf("PressKey returned error: %s", err)
 	}
 }
 

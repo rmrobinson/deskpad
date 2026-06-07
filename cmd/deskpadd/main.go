@@ -120,7 +120,7 @@ func main() {
 	// it will also be used to control media playback.
 	spotifyClient := configureSpotifyClient(ctx, "token.json")
 
-	var mprisClient *mpris.Player
+	var mprisConn *dbus.Conn
 	var mprisInstanceName string
 	var pulseAudioClient *pulseaudio.Client
 	// Setup MPRIS & PulseAudio, if configured
@@ -130,6 +130,7 @@ func main() {
 			panic(err)
 		}
 		defer conn.Close()
+		mprisConn = conn
 
 		names, err := mpris.List(conn)
 		if err != nil {
@@ -141,7 +142,6 @@ func main() {
 
 		mprisInstanceName = names[0]
 		log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
-		mprisClient = mpris.New(conn, mprisInstanceName)
 
 		paClient, err := pulseaudio.NewClient()
 		if err != nil {
@@ -320,15 +320,18 @@ func main() {
 	var linuxMpc *controllers.LinuxMediaPlayer
 	var spotifyMpc *controllers.SpotifyMediaPlayer
 	var apiMPC MediaPlayerController
+	var playlistPlaybackController controllers.PlaylistPlaybackController
 
-	if mprisClient != nil && pulseAudioClient != nil {
-		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, mprisInstanceName, pulseAudioClient)
+	if mprisConn != nil && pulseAudioClient != nil {
+		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, mprisInstanceName, pulseAudioClient)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
 		apiMPC = linuxMpc
+		playlistPlaybackController = linuxMpc
 	} else {
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
 		mps = screens.NewMediaPlayer(hs, spotifyMpc)
 		apiMPC = spotifyMpc
+		playlistPlaybackController = spotifyMpc
 	}
 
 	mpsc := controllers.NewMediaPlayerSetting(spotifyClient, pulseAudioClient)
@@ -338,7 +341,7 @@ func main() {
 	mpss.SetPlayerScreen(mps)
 	mps.SetSettingsScreen(mpss)
 
-	mplc := controllers.NewMediaPlaylist(spotifyClient, mprisClient, playlists)
+	mplc := controllers.NewMediaPlaylist(spotifyClient, playlistPlaybackController, playlists)
 	mplc.RefreshPlaylists(ctx)
 
 	mpls := screens.NewMediaPlaylist(hs, mplc)

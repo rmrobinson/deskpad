@@ -60,6 +60,21 @@ func (mp *SpotifyMediaPlayer) Play() {
 	mp.isPlaying = true
 }
 
+func (mp *SpotifyMediaPlayer) PlayURI(ctx context.Context, uri string) error {
+	playlistURI := spotify.URI(uri)
+	playlistOffset := 0
+	opts := &spotify.PlayOptions{
+		PlaybackContext: &playlistURI,
+		PlaybackOffset:  &spotify.PlaybackOffset{Position: &playlistOffset},
+	}
+
+	if err := mp.client.PlayOpt(ctx, opts); err != nil {
+		return err
+	}
+	mp.isPlaying = true
+	return nil
+}
+
 func (mp *SpotifyMediaPlayer) Pause() {
 	if err := mp.client.Pause(mp.ctx); err != nil {
 		log.Printf("error pausing: %s\n", err.Error())

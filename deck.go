@@ -52,7 +52,8 @@ type Deck struct {
 	rows     int
 	columns  int
 
-	lock sync.RWMutex
+	lock      sync.RWMutex
+	pressLock sync.Mutex
 }
 
 // NewDeck creates a new instance of the deck handler.
@@ -74,36 +75,34 @@ func (d *Deck) RegisterSurface(s Surface) {
 	}
 
 	d.lock.Lock()
-	defer d.lock.Unlock()
-
 	resized := d.configureGeometryLocked(s.KeyCount())
 	d.surfaces = append(d.surfaces, s)
+	snapshot := d.snapshotLocked()
+	screen := d.screen
+	d.lock.Unlock()
 
 	if resized {
-		d.refreshSurfacesLocked()
+		d.renderScreen(screen)
 		return
 	}
 
-	if err := s.Refresh(d.snapshotLocked()); err != nil {
+	if err := s.Refresh(snapshot); err != nil {
 		log.Printf("error refreshing surface %s: %s\n", s.ID(), err.Error())
 	}
 }
 
 // ChangeScreen allows for the currently displayed screen to be updated to the specified screen.
 func (d *Deck) ChangeScreen(ctx context.Context, s Screen) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.screen = s
-	d.refreshScreenLocked()
+	d.renderScreen(s)
 }
 
 // RefreshScreen queries the active screen for a set of icons and displays them on the control surfaces.
 func (d *Deck) RefreshScreen() {
-	d.lock.Lock()
-	defer d.lock.Unlock()
+	d.lock.RLock()
+	screen := d.screen
+	d.lock.RUnlock()
 
-	d.refreshScreenLocked()
+	d.renderScreen(screen)
 }
 
 // Screen returns the currently active screen
@@ -160,16 +159,21 @@ func (d *Deck) PressKey(ctx context.Context, keyID int, t KeyPressType) error {
 	keyCtx, keyCtxCancel := context.WithTimeout(ctx, keyHandlingTimeoutDuration)
 	defer keyCtxCancel()
 
-	d.lock.Lock()
-	defer d.lock.Unlock()
+	d.pressLock.Lock()
+	defer d.pressLock.Unlock()
 
+	d.lock.RLock()
 	if keyID < 0 || keyID >= len(d.keys) {
+		d.lock.RUnlock()
 		return fmt.Errorf("invalid key id %d", keyID)
 	}
+	screen := d.screen
+	screenName := screen.Name()
+	d.lock.RUnlock()
 
-	action, err := d.screen.KeyPressed(keyCtx, keyID, t)
+	action, err := screen.KeyPressed(keyCtx, keyID, t)
 	if err != nil {
-		log.Printf("screen %s got error handling key press for key %d: %s\n", d.screen.Name(), keyID, err.Error())
+		log.Printf("screen %s got error handling key press for key %d: %s\n", screenName, keyID, err.Error())
 		return err
 	}
 
@@ -179,18 +183,26 @@ func (d *Deck) PressKey(ctx context.Context, keyID int, t KeyPressType) error {
 			log.Fatal("deck asked to update screen but provided null screen")
 			return nil
 		}
-		d.screen = action.NewScreen
-		d.refreshScreenLocked()
+		d.renderScreen(action.NewScreen)
 	case KeyPressActionUpdateIcon:
 		if action.NewIcon == nil {
 			log.Fatal("deck asked to update icon but provided null icon")
 			return nil
 		}
 
+		d.lock.Lock()
+		if keyID < 0 || keyID >= len(d.keys) {
+			d.lock.Unlock()
+			return fmt.Errorf("invalid key id %d", keyID)
+		}
 		d.keys[keyID] = action.NewIcon
-		d.updateKeyLocked(keyID)
+		snapshot := d.snapshotLocked()
+		surfaces := d.surfacesLocked()
+		d.lock.Unlock()
+
+		d.updateKey(surfaces, snapshot, keyID)
 	case KeyPressActionRefreshScreen:
-		d.refreshScreenLocked()
+		d.renderScreen(screen)
 	case KeyPressActionNoop:
 		// Nothing to do!
 	}
@@ -198,31 +210,47 @@ func (d *Deck) PressKey(ctx context.Context, keyID int, t KeyPressType) error {
 	return nil
 }
 
-func (d *Deck) refreshScreenLocked() {
-	renderedKeys := make([]image.Image, len(d.keys))
-	keys := d.screen.Show()
-	copy(renderedKeys, keys)
-	d.keys = renderedKeys
+func (d *Deck) renderScreen(screen Screen) {
+	if screen == nil {
+		return
+	}
 
-	d.refreshSurfacesLocked()
+	d.lock.RLock()
+	keyCount := len(d.keys)
+	d.lock.RUnlock()
+
+	renderedKeys := make([]image.Image, keyCount)
+	keys := screen.Show()
+	copy(renderedKeys, keys)
+
+	d.lock.Lock()
+	d.screen = screen
+	d.keys = renderedKeys
+	snapshot := d.snapshotLocked()
+	surfaces := d.surfacesLocked()
+	d.lock.Unlock()
+
+	d.refreshSurfaces(surfaces, snapshot)
 }
 
-func (d *Deck) refreshSurfacesLocked() {
-	snapshot := d.snapshotLocked()
-	for _, surface := range d.surfaces {
+func (d *Deck) refreshSurfaces(surfaces []Surface, snapshot Snapshot) {
+	for _, surface := range surfaces {
 		if err := surface.Refresh(snapshot); err != nil {
-			log.Printf("error refreshing surface %s for screen %s: %s\n", surface.ID(), d.screen.Name(), err.Error())
+			log.Printf("error refreshing surface %s for screen %s: %s\n", surface.ID(), snapshot.ScreenName, err.Error())
 		}
 	}
 }
 
-func (d *Deck) updateKeyLocked(keyID int) {
-	snapshot := d.snapshotLocked()
-	for _, surface := range d.surfaces {
+func (d *Deck) updateKey(surfaces []Surface, snapshot Snapshot, keyID int) {
+	for _, surface := range surfaces {
 		if err := surface.UpdateKey(snapshot, keyID); err != nil {
 			log.Printf("deck got error setting image for key %d on surface %s: %s\n", keyID, surface.ID(), err.Error())
 		}
 	}
+}
+
+func (d *Deck) surfacesLocked() []Surface {
+	return append([]Surface(nil), d.surfaces...)
 }
 
 func (d *Deck) snapshotLocked() Snapshot {
@@ -259,7 +287,7 @@ func deckGeometry(keyCount int) (int, int) {
 		rows = 2
 	}
 
-	columns := keyCount / rows
+	columns := (keyCount + rows - 1) / rows
 	if columns == 0 {
 		columns = 1
 	}
