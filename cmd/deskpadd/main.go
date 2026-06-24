@@ -21,12 +21,10 @@ import (
 	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
 	tbbt "github.com/rmrobinson/timebox/bluetooth"
-	"github.com/rmrobinson/weather"
+	weatherv1 "github.com/rmrobinson/weather-server/proto/weather/v1"
 	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
 	"golang.org/x/oauth2"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.Client {
@@ -158,6 +156,19 @@ func main() {
 		log.Printf("*** MPRIS disabled\n")
 	}
 
+	// Setup weather, if configured
+	var wc *controllers.Weather
+	if viper.IsSet("weather.addr") {
+		wc = controllers.NewWeather(
+			viper.GetString("weather.addr"),
+			viper.GetBool("weather.use-tls"),
+			viper.GetString("weather.ca-cert"),
+		)
+		go wc.Run(ctx)
+	} else {
+		log.Printf("no weather address provided, will not check for weather updates")
+	}
+
 	// Setup Timebox, if configured
 	tbAddr := viper.GetString("timebox.addr")
 	var tbc *timebox.Conn
@@ -194,107 +205,53 @@ func main() {
 		tbConn.SetBrightness(100)
 		tbConn.SetTime(time.Now())
 
-		go func() {
-			if !viper.IsSet("weather.addr") {
-				log.Printf("no weather address provided, will not check for weather updates")
-				return
-			}
-
-			viper.SetDefault("weather.latitude", 0)
-			viper.SetDefault("weather.longitude", 0)
-			weatherInterval := time.Minute * 10
-			weatherAddr := viper.GetString("weather.addr")
-			latitude := viper.GetFloat64("weather.latitude")
-			longitude := viper.GetFloat64("weather.longitude")
-			log.Printf("checking weather from %s every %s for lat=%0.4f lon=%0.4f\n", weatherAddr, weatherInterval, latitude, longitude)
-			waitWeatherInterval := func() bool {
-				select {
-				case <-ctx.Done():
-					return false
-				case <-time.After(weatherInterval):
-					return true
-				}
-			}
-
-			for {
-				var opts []grpc.DialOption
-				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-				log.Printf("retrieving current weather from %s\n", weatherAddr)
-				conn, err := grpc.NewClient(weatherAddr, opts...)
-				if err != nil {
-					log.Printf("unable to connect to weather service: %s\n", err.Error())
-					if !waitWeatherInterval() {
+		if wc != nil {
+			go func() {
+				pushWeather := func() {
+					r := wc.LatestReading()
+					if r == nil {
 						return
 					}
-					continue
-				}
 
-				weatherClient := weather.NewWeatherServiceClient(conn)
-				weatherCtx, cancel := context.WithTimeout(ctx, time.Second*30)
-				currWeather, err := weatherClient.GetCurrentReport(weatherCtx, &weather.GetCurrentReportRequest{
-					Latitude:  latitude,
-					Longitude: longitude,
-				})
-				cancel()
-				conn.Close()
-
-				if err != nil {
-					log.Printf("unable to get current weather conditions: %s\n", err.Error())
-					if !waitWeatherInterval() {
-						return
+					var conds timebox.WeatherCondition
+					switch r.Condition {
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_SUNNY,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_MOSTLY_SUNNY:
+						conds = timebox.WeatherDarkClear
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_PARTLY_CLOUDY:
+						conds = timebox.WeatherDarkPartiallyCoudy
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_MOSTLY_CLOUDY,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_OVERCAST:
+						conds = timebox.WeatherDarkCloudy
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_LIGHT_RAIN,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_RAIN:
+						conds = timebox.WeatherDarkRain
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_HEAVY_RAIN:
+						conds = timebox.WeatherDarkRainAndLightning
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_FREEZING_RAIN,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_SNOW:
+						conds = timebox.WeatherDarkSnow
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_NIGHT:
+						conds = timebox.WeatherDarkClear
+					default:
+						conds = timebox.WeatherSun
 					}
-					continue
-				} else if currWeather.GetReport() == nil {
-					log.Printf("empty weather report\n")
-					if !waitWeatherInterval() {
+
+					log.Printf("weather shows feels-like %0.2f C (actual %0.2f C) with condition %s\n", r.FeelsLikeC, r.TempC, r.Condition)
+					tbConn.SetTemperatureAndWeather(int(r.FeelsLikeC), timebox.Celsius, conds)
+				}
+
+				pushWeather()
+				for {
+					select {
+					case <-ctx.Done():
 						return
+					case <-time.After(10 * time.Minute):
 					}
-					continue
-				} else if currWeather.GetReport().GetConditions() == nil {
-					log.Printf("empty weather conditions\n")
-					if !waitWeatherInterval() {
-						return
-					}
-					continue
+					pushWeather()
 				}
-
-				var conds timebox.WeatherCondition
-				switch currWeather.GetReport().GetConditions().SummaryIcon {
-				case weather.WeatherIcon_SUNNY:
-					conds = timebox.WeatherDarkClear
-				case weather.WeatherIcon_CLOUDY:
-					conds = timebox.WeatherDarkCloudy
-				case weather.WeatherIcon_PARTIALLY_CLOUDY:
-					conds = timebox.WeatherDarkPartiallyCoudy
-				case weather.WeatherIcon_MOSTLY_CLOUDY:
-					conds = timebox.WeatherDarkPartiallyCoudy
-				case weather.WeatherIcon_RAIN:
-					conds = timebox.WeatherDarkRain
-				case weather.WeatherIcon_CHANCE_OF_RAIN:
-					conds = timebox.WeatherDarkRain
-				case weather.WeatherIcon_SNOW:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_CHANCE_OF_SNOW:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_SNOW_SHOWERS:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_THUNDERSTORMS:
-					conds = timebox.WeatherDarkRainAndLightning
-				case weather.WeatherIcon_FOG:
-					conds = timebox.WeatherDarkFog
-				default:
-					conds = timebox.WeatherSun
-				}
-
-				log.Printf("weather shows %0.2f C with condition of %d\n", currWeather.GetReport().GetConditions().Temperature, conds)
-
-				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
-				if !waitWeatherInterval() {
-					return
-				}
-			}
-		}()
+			}()
+		}
 
 		tbc = tbConn
 	}
@@ -368,6 +325,10 @@ func main() {
 	if tbc != nil {
 		sc := controllers.NewScoreboard(tbc)
 		_ = screens.NewScoreboard(hs, sc)
+	}
+
+	if wc != nil {
+		_ = screens.NewWeather(hs, wc)
 	}
 
 	bs := controllers.NewBluetoothSetting(btAdapter, btAdapterID)
