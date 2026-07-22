@@ -5,20 +5,28 @@ import (
 	"image"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/rmrobinson/deskpad/ui"
-	"github.com/rmrobinson/go-mpris"
 	"github.com/zmb3/spotify/v2"
 	_ "golang.org/x/image/webp"
 )
+
+type PlaylistPlaybackController interface {
+	PlayURI(ctx context.Context, uri string) error
+}
+
+const playlistPlaybackTimeout = 5 * time.Second
 
 // MediaPlaylist is a controller which manages media playlist management
 // There are 2 sources of playlist data: a statically configured list of playlists;
 // and a dynamically refreshed list of playlists. These imlementation details are abstracted away
 // from the MediaPlaylist functions, which expose just a set of playlists for a UI to consume.
 type MediaPlaylist struct {
-	spotifyClient *spotify.Client
-	mprisClient   *mpris.Player
+	lock               sync.RWMutex
+	spotifyClient      *spotify.Client
+	playbackController PlaylistPlaybackController
 
 	staticPlaylists []ui.MediaPlaylist
 	cachedPlaylists []ui.MediaPlaylist
@@ -27,19 +35,22 @@ type MediaPlaylist struct {
 	currentPlaylist *ui.MediaPlaylist
 }
 
-// NewMediaPlaylist creates a controller for media playlist management. If supplied, MPRIS will be used for playback;
-// however Spotify is currently always used as the source of media content.
-func NewMediaPlaylist(sc *spotify.Client, mc *mpris.Player, staticPlaylists []ui.MediaPlaylist) *MediaPlaylist {
+// NewMediaPlaylist creates a controller for media playlist management. Spotify is always used
+// as the source of media content, and the playback controller is used to launch playlists.
+func NewMediaPlaylist(sc *spotify.Client, pc PlaylistPlaybackController, staticPlaylists []ui.MediaPlaylist) *MediaPlaylist {
 	return &MediaPlaylist{
-		spotifyClient:   sc,
-		mprisClient:     mc,
-		staticPlaylists: staticPlaylists,
-		playlists:       staticPlaylists,
+		spotifyClient:      sc,
+		playbackController: pc,
+		staticPlaylists:    staticPlaylists,
+		playlists:          staticPlaylists,
 	}
 }
 
 // GetPlaylists retrieves the list of cached playlists.
 func (mp *MediaPlaylist) GetPlaylists(count int, offset int) []ui.MediaPlaylist {
+	mp.lock.RLock()
+	defer mp.lock.RUnlock()
+
 	startIdx := offset
 	if startIdx > len(mp.playlists) {
 		startIdx = 0
@@ -50,7 +61,9 @@ func (mp *MediaPlaylist) GetPlaylists(count int, offset int) []ui.MediaPlaylist 
 		endIdx = len(mp.playlists)
 	}
 
-	return mp.playlists[startIdx:endIdx]
+	playlists := make([]ui.MediaPlaylist, endIdx-startIdx)
+	copy(playlists, mp.playlists[startIdx:endIdx])
+	return playlists
 
 }
 
@@ -74,14 +87,20 @@ func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
 		mediaPlaylist := ui.MediaPlaylist{ID: string(playlist.URI), Name: playlist.Name}
 		if len(playlist.Images) > 0 {
 			imgURL := playlist.Images[0].URL
-			resp, err := http.Get(imgURL)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+			if err != nil {
+				log.Printf("unable to create request for playlist image %s: %s\n", imgURL, err.Error())
+				continue
+			}
+
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				log.Printf("unable to download %s: %s\n", imgURL, err.Error())
 				continue
 			}
-			defer resp.Body.Close()
 
 			mediaPlaylist.Icon, _, err = image.Decode(resp.Body)
+			resp.Body.Close()
 			if err != nil {
 				log.Printf("unable to decode image for playlist %s at %s: %s\n", playlist.Name, imgURL, err.Error())
 				continue
@@ -94,6 +113,9 @@ func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
 	}
 
 	log.Printf("caching %d playlists\n", len(mediaPlaylists))
+	mp.lock.Lock()
+	defer mp.lock.Unlock()
+
 	mp.cachedPlaylists = mediaPlaylists
 
 	mp.playlists = nil
@@ -103,43 +125,60 @@ func (mp *MediaPlaylist) RefreshPlaylists(ctx context.Context) error {
 }
 
 // StartPlaylist begins playing the requested playlist URI.
-// If the MPRIS client is supplied it will use it; otherwise it'll default to Spotify.
 func (mp *MediaPlaylist) StartPlaylist(ctx context.Context, id string) {
-	if mp.mprisClient != nil {
-		log.Printf("playing URI: %s\n", id)
-		mp.mprisClient.OpenUri(id)
-		mp.mprisClient.Play()
-		mp.currentPlaylist = mp.getPlaylistbyID(id)
-	} else {
-		playlistURI := spotify.URI(id)
-		playlistOffset := 0
-		opts := &spotify.PlayOptions{
-			PlaybackContext: &playlistURI,
-			PlaybackOffset:  &spotify.PlaybackOffset{Position: &playlistOffset},
-		}
-
-		if err := mp.spotifyClient.PlayOpt(ctx, opts); err != nil {
-			log.Printf("error playing new playlist: %s\n", err.Error())
-			mp.currentPlaylist = nil
-			return
-		}
-
-		log.Printf("playing URI: %s\n", id)
-		mp.currentPlaylist = mp.getPlaylistbyID(id)
+	mp.lock.Lock()
+	playbackController := mp.playbackController
+	if mp.playbackController == nil {
+		log.Printf("no playback controller available for URI: %s\n", id)
+		mp.currentPlaylist = nil
+		mp.lock.Unlock()
+		return
 	}
+
+	log.Printf("playing URI: %s\n", id)
+	mp.currentPlaylist = mp.getPlaylistbyIDLocked(id)
+	mp.lock.Unlock()
+
+	go func() {
+		playbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), playlistPlaybackTimeout)
+		defer cancel()
+
+		if err := playbackController.PlayURI(playbackCtx, id); err != nil {
+			log.Printf("error playing URI %s: %s\n", id, err.Error())
+			mp.clearCurrentPlaylistIfID(id)
+		}
+	}()
 }
 
 // CurrentPlaylist returns the currently active playlist, if set.
 func (mp *MediaPlaylist) CurrentlyPlaylist() *ui.MediaPlaylist {
-	return mp.currentPlaylist
+	mp.lock.RLock()
+	defer mp.lock.RUnlock()
+
+	if mp.currentPlaylist == nil {
+		return nil
+	}
+
+	currentPlaylist := *mp.currentPlaylist
+	return &currentPlaylist
 }
 
-func (mp *MediaPlaylist) getPlaylistbyID(id string) *ui.MediaPlaylist {
+func (mp *MediaPlaylist) getPlaylistbyIDLocked(id string) *ui.MediaPlaylist {
 	for _, p := range mp.playlists {
 		if p.ID == id {
-			return &p
+			playlist := p
+			return &playlist
 		}
 	}
 
 	return nil
+}
+
+func (mp *MediaPlaylist) clearCurrentPlaylistIfID(id string) {
+	mp.lock.Lock()
+	defer mp.lock.Unlock()
+
+	if mp.currentPlaylist != nil && mp.currentPlaylist.ID == id {
+		mp.currentPlaylist = nil
+	}
 }

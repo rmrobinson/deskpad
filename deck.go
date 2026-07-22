@@ -2,12 +2,11 @@ package deskpad
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"log"
 	"sync"
 	"time"
-
-	sdeck "github.com/Luzifer/streamdeck"
 )
 
 // KeyPressType indicates if there was a short or a long keypress
@@ -16,6 +15,10 @@ type KeyPressType int
 const (
 	KeyPressShort KeyPressType = iota
 	KeyPressLong
+)
+
+const (
+	defaultKeyCount = 15
 )
 
 var (
@@ -41,132 +44,253 @@ type KeyPressAction struct {
 	NewIcon   image.Image
 }
 
-// Deck sits between a specific screen and the Screen Deck
+// Deck coordinates a screen across all registered control surfaces.
 type Deck struct {
-	sd *sdeck.Client
+	screen   Screen
+	surfaces []Surface
+	keys     []image.Image
+	rows     int
+	columns  int
 
-	screen Screen
-
-	lastKeyDown time.Time
-
-	lock sync.Mutex
+	lock      sync.RWMutex
+	pressLock sync.Mutex
 }
 
 // NewDeck creates a new instance of the deck handler.
-func NewDeck(sd *sdeck.Client, screen Screen) *Deck {
-	d := &Deck{
-		sd:     sd,
-		screen: screen,
+func NewDeck(screen Screen) *Deck {
+	rows, columns := deckGeometry(defaultKeyCount)
+
+	return &Deck{
+		screen:  screen,
+		keys:    make([]image.Image, defaultKeyCount),
+		rows:    rows,
+		columns: columns,
+	}
+}
+
+// RegisterSurface adds a control surface which should receive future screen renders.
+func (d *Deck) RegisterSurface(s Surface) {
+	if s == nil {
+		return
 	}
 
-	return d
+	d.lock.Lock()
+	resized := d.configureGeometryLocked(s.KeyCount())
+	d.surfaces = append(d.surfaces, s)
+	snapshot := d.snapshotLocked()
+	screen := d.screen
+	d.lock.Unlock()
+
+	if resized {
+		d.renderScreen(screen)
+		return
+	}
+
+	if err := s.Refresh(snapshot); err != nil {
+		log.Printf("error refreshing surface %s: %s\n", s.ID(), err.Error())
+	}
 }
 
 // ChangeScreen allows for the currently displayed screen to be updated to the specified screen.
 func (d *Deck) ChangeScreen(ctx context.Context, s Screen) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.screen = s
-	d.RefreshScreen()
+	d.renderScreen(s)
 }
 
-// RefreshScreen queries the active screen for a set of icons and displays them on the stream deck.
+// RefreshScreen queries the active screen for a set of icons and displays them on the control surfaces.
 func (d *Deck) RefreshScreen() {
-	d.sd.ClearAllKeys()
+	d.lock.RLock()
+	screen := d.screen
+	d.lock.RUnlock()
 
-	keys := d.screen.Show()
-	for keyID, keyImg := range keys {
-		if keyImg == nil {
-			d.sd.ClearKey(keyID)
-			continue
-		}
-		err := d.sd.FillImage(keyID, keyImg)
-		if err != nil {
-			log.Printf("error filling image to key %d on screen %s: %s\n", keyID, d.screen.Name(), err.Error())
-		}
-	}
+	d.renderScreen(screen)
 }
 
 // Screen returns the currently active screen
 func (d *Deck) Screen() Screen {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
 	return d.screen
 }
 
-// ID returns the ID of the stream deck being used
+// ID returns the ID of the first registered control surface.
 func (d *Deck) ID() string {
-	id, err := d.sd.Serial()
-	if err != nil {
-		log.Printf("error getting streamdeck id: %s\n", err.Error())
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	if len(d.surfaces) == 0 {
 		return ""
 	}
 
-	return id
+	return d.surfaces[0].ID()
 }
 
-// Run starts the loop of listening for inputs from the user on the stream deck.
-func (d *Deck) Run(ctx context.Context) {
-	d.RefreshScreen()
-	events := d.sd.Subscribe()
+// KeyCount returns the number of keys on the mirrored control surface.
+func (d *Deck) KeyCount() int {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 
-	for {
-		select {
-		case <-ctx.Done():
-			d.sd.ClearAllKeys()
-			return
+	return len(d.keys)
+}
 
-		case event := <-events:
-			if event.Type == sdeck.EventTypeDown {
-				d.lastKeyDown = time.Now()
-				continue
-			} else if event.Type == sdeck.EventTypeUp {
-				t := KeyPressShort
-				if d.lastKeyDown.Add(longKeypressDuration).Before(time.Now()) {
-					t = KeyPressLong
-				}
+// Snapshot returns the current rendered control-surface state.
+func (d *Deck) Snapshot() Snapshot {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 
-				keyCtx, keyCtxCancel := context.WithTimeout(ctx, keyHandlingTimeoutDuration)
+	return d.snapshotLocked()
+}
 
-				d.lock.Lock()
-				action, err := d.screen.KeyPressed(keyCtx, event.Key, t)
-				if err != nil {
-					log.Printf("screen %s got error handling key press for key %d: %s\n", d.screen.Name(), event.Key, err.Error())
-					d.lock.Unlock()
-					keyCtxCancel()
-					continue
-				}
-				d.lock.Unlock()
+// Clear clears all registered control surfaces.
+func (d *Deck) Clear() {
+	d.lock.RLock()
+	surfaces := append([]Surface(nil), d.surfaces...)
+	d.lock.RUnlock()
 
-				switch action.Action {
-				case KeyPressActionChangeScreen:
-					if action.NewScreen == nil {
-						log.Fatal("deck asked to update screen but provided null screen")
-						keyCtxCancel()
-						continue
-					}
-					d.ChangeScreen(keyCtx, action.NewScreen)
-				case KeyPressActionUpdateIcon:
-					if action.NewIcon == nil {
-						log.Fatal("deck asked to update icon but provided null icon")
-						keyCtxCancel()
-						continue
-					}
-
-					err = d.sd.FillImage(event.Key, action.NewIcon)
-					if err != nil {
-						log.Printf("deck got error setting image for key %d: %s\n", event.Key, err.Error())
-					}
-				case KeyPressActionRefreshScreen:
-					d.RefreshScreen()
-				case KeyPressActionNoop:
-					// Nothing to do!
-				}
-
-				keyCtxCancel()
-				continue
-			}
-
-			log.Printf("received unhandled event type %d for key %d\n", event.Type, event.Key)
+	for _, surface := range surfaces {
+		if err := surface.Clear(); err != nil {
+			log.Printf("error clearing surface %s: %s\n", surface.ID(), err.Error())
 		}
 	}
+}
+
+// PressKey handles a key press from any control surface.
+func (d *Deck) PressKey(ctx context.Context, keyID int, t KeyPressType) error {
+	keyCtx, keyCtxCancel := context.WithTimeout(ctx, keyHandlingTimeoutDuration)
+	defer keyCtxCancel()
+
+	d.pressLock.Lock()
+	defer d.pressLock.Unlock()
+
+	d.lock.RLock()
+	if keyID < 0 || keyID >= len(d.keys) {
+		d.lock.RUnlock()
+		return fmt.Errorf("invalid key id %d", keyID)
+	}
+	screen := d.screen
+	screenName := screen.Name()
+	d.lock.RUnlock()
+
+	action, err := screen.KeyPressed(keyCtx, keyID, t)
+	if err != nil {
+		log.Printf("screen %s got error handling key press for key %d: %s\n", screenName, keyID, err.Error())
+		return err
+	}
+
+	switch action.Action {
+	case KeyPressActionChangeScreen:
+		if action.NewScreen == nil {
+			log.Fatal("deck asked to update screen but provided null screen")
+			return nil
+		}
+		d.renderScreen(action.NewScreen)
+	case KeyPressActionUpdateIcon:
+		if action.NewIcon == nil {
+			log.Fatal("deck asked to update icon but provided null icon")
+			return nil
+		}
+
+		d.lock.Lock()
+		if keyID < 0 || keyID >= len(d.keys) {
+			d.lock.Unlock()
+			return fmt.Errorf("invalid key id %d", keyID)
+		}
+		d.keys[keyID] = action.NewIcon
+		snapshot := d.snapshotLocked()
+		surfaces := d.surfacesLocked()
+		d.lock.Unlock()
+
+		d.updateKey(surfaces, snapshot, keyID)
+	case KeyPressActionRefreshScreen:
+		d.renderScreen(screen)
+	case KeyPressActionNoop:
+		// Nothing to do!
+	}
+
+	return nil
+}
+
+func (d *Deck) renderScreen(screen Screen) {
+	if screen == nil {
+		return
+	}
+
+	d.lock.RLock()
+	keyCount := len(d.keys)
+	d.lock.RUnlock()
+
+	renderedKeys := make([]image.Image, keyCount)
+	keys := screen.Show()
+	copy(renderedKeys, keys)
+
+	d.lock.Lock()
+	d.screen = screen
+	d.keys = renderedKeys
+	snapshot := d.snapshotLocked()
+	surfaces := d.surfacesLocked()
+	d.lock.Unlock()
+
+	d.refreshSurfaces(surfaces, snapshot)
+}
+
+func (d *Deck) refreshSurfaces(surfaces []Surface, snapshot Snapshot) {
+	for _, surface := range surfaces {
+		if err := surface.Refresh(snapshot); err != nil {
+			log.Printf("error refreshing surface %s for screen %s: %s\n", surface.ID(), snapshot.ScreenName, err.Error())
+		}
+	}
+}
+
+func (d *Deck) updateKey(surfaces []Surface, snapshot Snapshot, keyID int) {
+	for _, surface := range surfaces {
+		if err := surface.UpdateKey(snapshot, keyID); err != nil {
+			log.Printf("deck got error setting image for key %d on surface %s: %s\n", keyID, surface.ID(), err.Error())
+		}
+	}
+}
+
+func (d *Deck) surfacesLocked() []Surface {
+	return append([]Surface(nil), d.surfaces...)
+}
+
+func (d *Deck) snapshotLocked() Snapshot {
+	keys := make([]image.Image, len(d.keys))
+	copy(keys, d.keys)
+
+	return Snapshot{
+		ScreenName: d.screen.Name(),
+		Rows:       d.rows,
+		Columns:    d.columns,
+		Keys:       keys,
+	}
+}
+
+func (d *Deck) configureGeometryLocked(keyCount int) bool {
+	if keyCount <= 0 || keyCount == len(d.keys) {
+		return false
+	}
+
+	rows, columns := deckGeometry(keyCount)
+	d.keys = make([]image.Image, keyCount)
+	d.rows = rows
+	d.columns = columns
+	return true
+}
+
+func deckGeometry(keyCount int) (int, int) {
+	if keyCount <= 0 {
+		keyCount = defaultKeyCount
+	}
+
+	rows := 3
+	if keyCount <= 6 {
+		rows = 2
+	}
+
+	columns := (keyCount + rows - 1) / rows
+	if columns == 0 {
+		columns = 1
+	}
+
+	return rows, columns
 }

@@ -21,12 +21,10 @@ import (
 	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
 	tbbt "github.com/rmrobinson/timebox/bluetooth"
-	"github.com/rmrobinson/weather"
+	weatherv1 "github.com/rmrobinson/weather-server/proto/weather/v1"
 	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
 	"golang.org/x/oauth2"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.Client {
@@ -82,6 +80,7 @@ func main() {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("$HOME/.deskpad")
 	viper.AddConfigPath(".")
+	viper.SetDefault("web.addr", ":1337")
 
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -119,7 +118,7 @@ func main() {
 	// it will also be used to control media playback.
 	spotifyClient := configureSpotifyClient(ctx, "token.json")
 
-	var mprisClient *mpris.Player
+	var mprisConn *dbus.Conn
 	var mprisInstanceName string
 	var pulseAudioClient *pulseaudio.Client
 	// Setup MPRIS & PulseAudio, if configured
@@ -128,29 +127,46 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		defer conn.Close()
+		mprisConn = conn
 
 		names, err := mpris.List(conn)
 		if err != nil {
 			panic(err)
 		}
 		if len(names) == 0 {
-			log.Fatal("No media player found.")
+			log.Printf("*** No MPRIS media player found; falling back to Spotify playback control\n")
+			conn.Close()
+			mprisConn = nil
+		} else {
+			mprisInstanceName = names[0]
+			log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
+
+			paClient, err := pulseaudio.NewClient()
+			if err != nil {
+				log.Printf("error connecting to pulseaudio; falling back to Spotify playback control: %s\n", err.Error())
+				conn.Close()
+				mprisConn = nil
+			} else {
+				defer conn.Close()
+				defer paClient.Close()
+				pulseAudioClient = paClient
+			}
 		}
-
-		mprisInstanceName = names[0]
-		log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
-		mprisClient = mpris.New(conn, mprisInstanceName)
-
-		paClient, err := pulseaudio.NewClient()
-		if err != nil {
-			log.Fatalf("error connecting to pulseaudio: %s\n", err.Error())
-		}
-		defer paClient.Close()
-
-		pulseAudioClient = paClient
 	} else {
 		log.Printf("*** MPRIS disabled\n")
+	}
+
+	// Setup weather, if configured
+	var wc *controllers.Weather
+	if viper.IsSet("weather.addr") {
+		wc = controllers.NewWeather(
+			viper.GetString("weather.addr"),
+			viper.GetBool("weather.use-tls"),
+			viper.GetString("weather.ca-cert"),
+		)
+		go wc.Run(ctx)
+	} else {
+		log.Printf("no weather address provided, will not check for weather updates")
 	}
 
 	// Setup Timebox, if configured
@@ -189,78 +205,53 @@ func main() {
 		tbConn.SetBrightness(100)
 		tbConn.SetTime(time.Now())
 
-		go func() {
-			if !viper.IsSet("weather.addr") {
-				log.Printf("no weather address provided, will not check for weather updates")
-				return
-			}
+		if wc != nil {
+			go func() {
+				pushWeather := func() {
+					r := wc.LatestReading()
+					if r == nil {
+						return
+					}
 
-			viper.SetDefault("weather.latitude", 0)
-			viper.SetDefault("weather.longitude", 0)
+					var conds timebox.WeatherCondition
+					switch r.Condition {
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_SUNNY,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_MOSTLY_SUNNY:
+						conds = timebox.WeatherDarkClear
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_PARTLY_CLOUDY:
+						conds = timebox.WeatherDarkPartiallyCoudy
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_MOSTLY_CLOUDY,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_OVERCAST:
+						conds = timebox.WeatherDarkCloudy
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_LIGHT_RAIN,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_RAIN:
+						conds = timebox.WeatherDarkRain
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_HEAVY_RAIN:
+						conds = timebox.WeatherDarkRainAndLightning
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_FREEZING_RAIN,
+						weatherv1.WeatherCondition_WEATHER_CONDITION_SNOW:
+						conds = timebox.WeatherDarkSnow
+					case weatherv1.WeatherCondition_WEATHER_CONDITION_NIGHT:
+						conds = timebox.WeatherDarkClear
+					default:
+						conds = timebox.WeatherSun
+					}
 
-			for {
-				time.Sleep(time.Minute * 10)
-
-				var opts []grpc.DialOption
-				opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-				conn, err := grpc.NewClient(viper.GetString("weather.addr"), opts...)
-				if err != nil {
-					log.Printf("unable to connect to weather service: %s\n", err.Error())
-					continue
+					log.Printf("weather shows feels-like %0.2f C (actual %0.2f C) with condition %s\n", r.FeelsLikeC, r.TempC, r.Condition)
+					tbConn.SetTemperatureAndWeather(int(r.FeelsLikeC), timebox.Celsius, conds)
 				}
 
-				weatherClient := weather.NewWeatherServiceClient(conn)
-				currWeather, err := weatherClient.GetCurrentReport(context.Background(), &weather.GetCurrentReportRequest{
-					Latitude:  viper.GetFloat64("weather.latitude"),
-					Longitude: viper.GetFloat64("weather.longitude"),
-				})
-				conn.Close()
-
-				if err != nil {
-					log.Printf("unable to get current weather conditions: %s\n", err.Error())
-					continue
-				} else if currWeather.GetReport() == nil {
-					log.Printf("empty weather report\n")
-					continue
-				} else if currWeather.GetReport().GetConditions() == nil {
-					log.Printf("empty weather conditions\n")
-					continue
+				pushWeather()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(10 * time.Minute):
+					}
+					pushWeather()
 				}
-
-				var conds timebox.WeatherCondition
-				switch currWeather.GetReport().GetConditions().SummaryIcon {
-				case weather.WeatherIcon_SUNNY:
-					conds = timebox.WeatherDarkClear
-				case weather.WeatherIcon_CLOUDY:
-					conds = timebox.WeatherDarkCloudy
-				case weather.WeatherIcon_PARTIALLY_CLOUDY:
-					conds = timebox.WeatherDarkPartiallyCoudy
-				case weather.WeatherIcon_MOSTLY_CLOUDY:
-					conds = timebox.WeatherDarkPartiallyCoudy
-				case weather.WeatherIcon_RAIN:
-					conds = timebox.WeatherDarkRain
-				case weather.WeatherIcon_CHANCE_OF_RAIN:
-					conds = timebox.WeatherDarkRain
-				case weather.WeatherIcon_SNOW:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_CHANCE_OF_SNOW:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_SNOW_SHOWERS:
-					conds = timebox.WeatherDarkSnow
-				case weather.WeatherIcon_THUNDERSTORMS:
-					conds = timebox.WeatherDarkRainAndLightning
-				case weather.WeatherIcon_FOG:
-					conds = timebox.WeatherDarkFog
-				default:
-					conds = timebox.WeatherSun
-				}
-
-				log.Printf("weather shows %0.2f C with condition of %d\n", currWeather.GetReport().GetConditions().Temperature, conds)
-
-				tbConn.SetTemperatureAndWeather(int(currWeather.GetReport().GetConditions().Temperature), timebox.Celsius, conds)
-			}
-		}()
+			}()
+		}
 
 		tbc = tbConn
 	}
@@ -289,13 +280,19 @@ func main() {
 	var mps *screens.MediaPlayer
 	var linuxMpc *controllers.LinuxMediaPlayer
 	var spotifyMpc *controllers.SpotifyMediaPlayer
+	var apiMPC MediaPlayerController
+	var playlistPlaybackController controllers.PlaylistPlaybackController
 
-	if mprisClient != nil && pulseAudioClient != nil {
-		linuxMpc = controllers.NewLinuxMediaPlayer(mprisClient, mprisInstanceName, pulseAudioClient)
+	if mprisConn != nil && pulseAudioClient != nil {
+		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, mprisInstanceName, pulseAudioClient)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
+		apiMPC = linuxMpc
+		playlistPlaybackController = linuxMpc
 	} else {
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
 		mps = screens.NewMediaPlayer(hs, spotifyMpc)
+		apiMPC = spotifyMpc
+		playlistPlaybackController = spotifyMpc
 	}
 
 	mpsc := controllers.NewMediaPlayerSetting(spotifyClient, pulseAudioClient)
@@ -305,7 +302,7 @@ func main() {
 	mpss.SetPlayerScreen(mps)
 	mps.SetSettingsScreen(mpss)
 
-	mplc := controllers.NewMediaPlaylist(spotifyClient, mprisClient, playlists)
+	mplc := controllers.NewMediaPlaylist(spotifyClient, playlistPlaybackController, playlists)
 	mplc.RefreshPlaylists(ctx)
 
 	mpls := screens.NewMediaPlaylist(hs, mplc)
@@ -330,27 +327,57 @@ func main() {
 		_ = screens.NewScoreboard(hs, sc)
 	}
 
+	if wc != nil {
+		_ = screens.NewWeather(hs, wc)
+	}
+
 	bs := controllers.NewBluetoothSetting(btAdapter, btAdapterID)
 	bs.RefreshDevices(ctx)
 	_ = screens.NewBluetoothSetting(hs, bs)
 
-	d := deskpad.NewDeck(sd, hs)
+	d := deskpad.NewDeck(hs)
+	var streamDeckSurface *deskpad.StreamDeckSurface
+	if sd != nil {
+		streamDeckSurface = deskpad.NewStreamDeckSurface(sd)
+		d.RegisterSurface(streamDeckSurface)
+	}
+
+	webSurface := deskpad.NewWebSurface()
+	d.RegisterSurface(webSurface)
+	d.RefreshScreen()
+
+	if streamDeckSurface != nil {
+		go streamDeckSurface.Run(ctx, d)
+	}
 
 	// Set up the API
 	go func() {
 		api := &API{
-			mpc:  linuxMpc,
-			mplc: mplc,
-			mpsc: mpsc,
-			d:    d,
+			mpc:       apiMPC,
+			mplc:      mplc,
+			mpsc:      mpsc,
+			d:         d,
+			web:       webSurface,
+			authToken: viper.GetString("web.auth-token"),
 		}
 
 		mux := http.NewServeMux()
+		mux.HandleFunc("/", api.Index)
+		mux.HandleFunc("/manifest.webmanifest", api.WebAsset)
+		mux.HandleFunc("/service-worker.js", api.WebAsset)
+		mux.HandleFunc("/icons/", api.WebAsset)
 		mux.HandleFunc("/status", api.Status)
+		mux.HandleFunc("/api/ui/state", api.UIState)
+		mux.HandleFunc("/api/ui/events", api.UIEvents)
+		mux.HandleFunc("/api/ui/keys/", api.UIPressKey)
 
-		log.Printf("starting http api\n")
-		http.ListenAndServe(":1337", mux)
+		addr := viper.GetString("web.addr")
+		log.Printf("starting http api on %s\n", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil && err != http.ErrServerClosed {
+			log.Printf("http api stopped: %s\n", err.Error())
+		}
 	}()
 
-	d.Run(ctx)
+	<-ctx.Done()
+	d.Clear()
 }
