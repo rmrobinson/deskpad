@@ -27,3 +27,10 @@ go.work.sum
 # deskpad configs
 deskpad.yaml
 token.json
+deskpad.env
+
+# make build output
+/bin/
+
+# Claude local config / worktrees
+.claude/
