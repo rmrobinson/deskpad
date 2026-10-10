@@ -44,3 +44,12 @@ bridge:
   addr: :7700
   device-id: desk-1
   device-name: Rob's Desk
+  use-tls: true
+  cert-file: /etc/house/tls/tls.crt
+  key-file: /etc/house/tls/tls.key
+  ca-cert: /etc/house/tls/ca.crt
+  # Restricts connections to a client cert whose DNS SAN matches this name,
+  # on top of plain chain-of-trust against ca-cert - house's shared step-ca
+  # provisioner issues every service a cert, so trusting the CA alone would
+  # let any of them connect, not just the intended house aggregator.
+  client-name: housed.yourhost.house.internal

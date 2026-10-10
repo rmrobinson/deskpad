@@ -36,7 +36,13 @@ func bridgeServerOptions() ([]grpc.ServerOption, error) {
 	}
 	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 
-	if caCert := viper.GetString("bridge.ca-cert"); caCert != "" {
+	caCert := viper.GetString("bridge.ca-cert")
+	clientName := viper.GetString("bridge.client-name")
+	if clientName != "" && caCert == "" {
+		return nil, fmt.Errorf("bridge.client-name is set but bridge.ca-cert is not")
+	}
+
+	if caCert != "" {
 		pem, err := os.ReadFile(caCert)
 		if err != nil {
 			return nil, fmt.Errorf("read bridge.ca-cert %s: %w", caCert, err)
@@ -47,7 +53,39 @@ func bridgeServerOptions() ([]grpc.ServerOption, error) {
 		}
 		tlsCfg.ClientCAs = pool
 		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+
+		if clientName != "" {
+			tlsCfg.VerifyPeerCertificate = verifyClientName(clientName)
+		}
 	}
 
 	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsCfg))}, nil
+}
+
+// verifyClientName returns a tls.Config.VerifyPeerCertificate callback that,
+// on top of Go's own chain-of-trust check (tls.RequireAndVerifyClientCert
+// against bridge.ca-cert), additionally rejects any client certificate whose
+// DNS SAN doesn't include name. This matters here specifically because
+// house's step-ca provisioner issues every bridge and housed itself a cert
+// from one shared CA - "the trust boundary here is this internal network,
+// not per-host isolation" (house-config's own docs) - so chain validation
+// alone would let any house service holding a valid cert connect, not just
+// the house aggregator this bridge is meant to serve. The house repo's own
+// convention names the client's cert "<name>.<host>.house.internal";
+// bridge.client-name is that same name, the mirror image of House's
+// client-side server-name override (ui/controllers/house.go).
+func verifyClientName(name string) func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
+	return func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
+		for _, chain := range verifiedChains {
+			if len(chain) == 0 {
+				continue
+			}
+			for _, dnsName := range chain[0].DNSNames {
+				if dnsName == name {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("client certificate is not authorized for this bridge (want DNS name %q)", name)
+	}
 }

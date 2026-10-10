@@ -87,7 +87,7 @@ When `bridge.addr` is set, the daemon also runs a gRPC server implementing the h
   - **Volume trait** — reads/writes whatever the active controller already treats as "the" volume (PulseAudio for `LinuxMediaPlayer`, the active Spotify Connect device for `SpotifyMediaPlayer`), via `GetVolume()`/`SetVolume()` on `BridgeMediaPlayerController`.
   - **App trait** — the registered screens (`Home.Screens()`, prefixed with `Home` itself as the default/`AppClose` target) as selectable "applications"; `AppLaunch`/`AppClose` call `Deck.ChangeScreen`.
 - `StreamUpdates` pushes a `DeviceUpdate` on every `ExecuteCommand`/`ExecuteCommandAsync`, plus a 2s poll (`bridgePollInterval`) that only runs while at least one subscriber is attached, so changes made outside a bridge command (a physical key press, pausing Spotify from a phone) still reach subscribers.
-- `cmd/deskpadd/bridge.go` builds the server's `grpc.ServerOption`s from `bridge.*` config; TLS is optional and, when enabled with `bridge.ca-cert` set, requires a verified client certificate (mutual TLS).
+- `cmd/deskpadd/bridge.go` builds the server's `grpc.ServerOption`s from `bridge.*` config; TLS is optional and, when enabled with `bridge.ca-cert` set, requires a verified client certificate (mutual TLS). `bridge.client-name`, if also set, additionally rejects any otherwise-valid client certificate whose DNS SAN doesn't match it — house's step-ca provisioner issues every bridge and `housed` a cert from one shared CA, so chain validation alone would let any of them connect, not just the intended house aggregator. This is the server-side mirror of `house.server-name` on the House client controller (`ui/controllers/house.go`).
 
 ## Coding Standards
 
@@ -143,6 +143,7 @@ Notable config keys:
 - `bridge.addr`: string — gRPC listen address for the house bridge server; unset disables it. This is the *server* direction — DeskPad exposing itself as a bridge for a house aggregator to dial into.
 - `bridge.device-id`, `bridge.device-name`: stable device ID (defaults to hostname) and display name for the device this DeskPad instance exposes.
 - `bridge.use-tls`, `bridge.cert-file`, `bridge.key-file`, `bridge.ca-cert`: house bridge server TLS config; setting `ca-cert` additionally requires and verifies a client certificate (mutual TLS).
+- `bridge.client-name`: string — restricts inbound mutual-TLS connections to a client certificate whose DNS SAN matches this name (e.g. `housed.yourhost.house.internal`). Requires `bridge.ca-cert` to be set; otherwise there's no verified chain to check a name against.
 
 Sensitive or machine-local config and OAuth token files are ignored by git. Do not add real tokens, device addresses, or personal config values to tracked files.
 
