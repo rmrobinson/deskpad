@@ -146,58 +146,47 @@ func (mp *SpotifyMediaPlayer) Rewind() {
 }
 
 func (mp *SpotifyMediaPlayer) Mute() {
-	state, err := mp.client.PlayerState(mp.ctx)
-	if err != nil {
-		log.Printf("error getting current volume: %s\n", err.Error())
-		return
-	}
-
-	mp.prevVolume = int(state.Device.Volume)
-
-	if err := mp.client.Volume(mp.ctx, 0); err != nil {
-		log.Printf("error muting device: %s\n", err.Error())
-	}
+	mp.prevVolume = mp.GetVolume()
+	mp.SetVolume(0)
 	mp.isMuted = true
 }
 
 func (mp *SpotifyMediaPlayer) Unmute() {
-	if err := mp.client.Volume(mp.ctx, mp.prevVolume); err != nil {
-		log.Printf("error unmuting device: %s\n", err.Error())
-	}
+	mp.SetVolume(mp.prevVolume)
 	mp.isMuted = false
 }
 
 func (mp *SpotifyMediaPlayer) VolumeUp() {
-	state, err := mp.client.PlayerState(mp.ctx)
-	if err != nil {
-		log.Printf("error getting current volume: %s\n", err.Error())
-		return
-	}
-
-	newVolume := int(state.Device.Volume) + spotifyMediaPlayerVolumeStep
-	if newVolume > 100 {
-		newVolume = 100
-	}
-
-	if err := mp.client.Volume(mp.ctx, newVolume); err != nil {
-		log.Printf("error increasing volume: %s\n", err.Error())
-	}
+	mp.SetVolume(mp.GetVolume() + spotifyMediaPlayerVolumeStep)
 }
 
 func (mp *SpotifyMediaPlayer) VolumeDown() {
+	mp.SetVolume(mp.GetVolume() - spotifyMediaPlayerVolumeStep)
+}
+
+// GetVolume returns the active Spotify Connect device's volume as a 0-100
+// percentage. Returns 0 if the level can't be read.
+func (mp *SpotifyMediaPlayer) GetVolume() int {
 	state, err := mp.client.PlayerState(mp.ctx)
 	if err != nil {
 		log.Printf("error getting current volume: %s\n", err.Error())
-		return
+		return 0
 	}
 
-	newVolume := int(state.Device.Volume) - spotifyMediaPlayerVolumeStep
-	if newVolume < 0 {
-		newVolume = 0
+	return int(state.Device.Volume)
+}
+
+// SetVolume sets the active Spotify Connect device's volume to pct, a 0-100
+// percentage (clamped).
+func (mp *SpotifyMediaPlayer) SetVolume(pct int) {
+	if pct < 0 {
+		pct = 0
+	} else if pct > 100 {
+		pct = 100
 	}
 
-	if err := mp.client.Volume(mp.ctx, newVolume); err != nil {
-		log.Printf("error decreasing volume: %s\n", err.Error())
+	if err := mp.client.Volume(mp.ctx, pct); err != nil {
+		log.Printf("error setting volume: %s\n", err.Error())
 	}
 }
 

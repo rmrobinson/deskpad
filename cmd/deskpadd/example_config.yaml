@@ -40,3 +40,7 @@ house:
   rooms:
     - room-id: 11111111-1111-1111-1111-111111111111
       label: Living Room
+bridge:
+  addr: :7700
+  device-id: desk-1
+  device-name: Rob's Desk
