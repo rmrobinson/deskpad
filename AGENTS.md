@@ -111,7 +111,7 @@ Use `cmd/deskpadd/example_config.yaml` as the schema reference. Feature blocks a
 
 Notable config keys:
 - `use-streamdeck`: bool — attach to a physical Stream Deck.
-- `use-mpris`: bool — use Linux MPRIS/PulseAudio instead of Spotify for playback.
+- `use-mpris`: bool — use Linux MPRIS/PulseAudio for playback. When false (e.g. non-Linux hosts) playback is controlled through the Spotify API; there is no fallback between the two. With it set, PulseAudio must be reachable at startup, but an MPRIS player may appear later.
 - `web.addr`: string — HTTP listen address (default `:1337`).
 - `web.auth-token`: string — bearer token required for `POST /api/ui/keys/{id}/press`; if empty, key presses from the web are disabled.
 - `weather.addr`, `weather.use-tls`, `weather.ca-cert`: weather-server gRPC config.
@@ -141,6 +141,6 @@ Hardware-dependent behavior may require a connected Stream Deck, Bluetooth adapt
 ## Development Notes
 
 - `TODO.md` tracks planned work including Stream Deck dimension support, Timebox, playlist, playback, and known bugs.
-- Be careful with nil optional integrations. Some startup paths intentionally use Spotify when MPRIS/PulseAudio are disabled.
+- Be careful with nil optional integrations. Spotify playback control is used only when `use-mpris` is false.
 - When adding API surface, keep response types JSON-tagged and avoid leaking internal controller types directly.
 - When touching Spotify auth, preserve OAuth state validation and keep token file permissions restrictive.

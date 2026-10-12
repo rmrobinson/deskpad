@@ -133,27 +133,24 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		// A player doesn't need to be present at startup: the controller looks one up on every command, so
+		// daemon start order relative to the media player doesn't matter.
 		if len(names) == 0 {
-			log.Printf("*** No MPRIS media player found; falling back to Spotify playback control\n")
-			conn.Close()
-			mprisConn = nil
+			log.Printf("*** No MPRIS media player found yet; will use one when it appears\n")
 		} else {
 			mprisInstanceName = names[0]
 			log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
-
-			paClient, err := pulseaudio.NewClient()
-			if err != nil {
-				log.Printf("error connecting to pulseaudio; falling back to Spotify playback control: %s\n", err.Error())
-				conn.Close()
-				mprisConn = nil
-			} else {
-				defer conn.Close()
-				defer paClient.Close()
-				pulseAudioClient = paClient
-			}
 		}
+
+		paClient, err := pulseaudio.NewClient()
+		if err != nil {
+			log.Fatalf("unable to connect to pulseaudio (required when use-mpris is set): %s\n", err.Error())
+		}
+		defer conn.Close()
+		defer paClient.Close()
+		pulseAudioClient = paClient
 	} else {
-		log.Printf("*** MPRIS disabled\n")
+		log.Printf("*** MPRIS disabled; using Spotify playback control\n")
 	}
 
 	// Setup weather, if configured
@@ -283,8 +280,9 @@ func main() {
 	var apiMPC MediaPlayerController
 	var playlistPlaybackController controllers.PlaylistPlaybackController
 
-	if mprisConn != nil && pulseAudioClient != nil {
+	if viper.GetBool("use-mpris") {
 		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, mprisInstanceName, pulseAudioClient)
+		defer linuxMpc.Close()
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
 		apiMPC = linuxMpc
 		playlistPlaybackController = linuxMpc
