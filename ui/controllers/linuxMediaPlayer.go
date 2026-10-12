@@ -23,6 +23,9 @@ const (
 	linuxMediaPlayerPlayVerifyDelay = 5 * time.Second
 	// linuxMediaPlayerStatusTimeout bounds the playback status query so a hung player can't wedge the check.
 	linuxMediaPlayerStatusTimeout = 2 * time.Second
+	// linuxMediaPlayerCallTimeout bounds every call to a player so a frozen player can't block the key press
+	// handler or state polling. A responsive player replies in milliseconds.
+	linuxMediaPlayerCallTimeout = 2 * time.Second
 	// linuxMediaPlayerUnresponsiveTTL bounds how long a player stays flagged unresponsive if it never signals
 	// that it has started playing again.
 	linuxMediaPlayerUnresponsiveTTL = 5 * time.Minute
@@ -41,7 +44,6 @@ const (
 type LinuxMediaPlayer struct {
 	lock              sync.Mutex
 	mprisConn         *dbus.Conn
-	mprisClient       *mpris.Player
 	mprisInstanceName string
 	// unresponsive holds MPRIS instance names which accepted a play command but did not start playing, and when
 	// they were flagged. When issuing a play command other players are preferred over these. A flag is cleared
@@ -62,7 +64,6 @@ type LinuxMediaPlayer struct {
 func NewLinuxMediaPlayer(mprisConn *dbus.Conn, mprisInstanceName string, paClient *pulseaudio.Client) *LinuxMediaPlayer {
 	m := &LinuxMediaPlayer{
 		mprisConn:         mprisConn,
-		mprisClient:       mpris.New(mprisConn, mprisInstanceName),
 		mprisInstanceName: mprisInstanceName,
 		unresponsive:      make(map[string]time.Time),
 		paClient:          paClient,
@@ -88,7 +89,7 @@ func (m *LinuxMediaPlayer) Close() {
 }
 
 func (m *LinuxMediaPlayer) ID() string {
-	_, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return ""
 	}
@@ -97,66 +98,89 @@ func (m *LinuxMediaPlayer) ID() string {
 }
 
 func (m *LinuxMediaPlayer) Play() {
-	client, name, ok := m.clientForPlay()
+	name, ok := m.playerNameForPlay()
 	if !ok {
 		return
 	}
 
 	log.Printf("mpris %s: Play\n", name)
 	seq := m.noteCommand()
-	client.Play()
+	if err := m.callPlayer(name, "Play"); err != nil {
+		log.Printf("mpris %s: Play failed: %s\n", name, err.Error())
+		if errors.Is(err, context.DeadlineExceeded) {
+			// A player that doesn't answer a method call at all is as unresponsive as one that ignores it.
+			m.markUnresponsive(name, "play command timed out")
+		}
+		return
+	}
 	m.verifyPlaying(name, seq)
 }
 func (m *LinuxMediaPlayer) Pause() {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
 	log.Printf("mpris %s: Pause\n", name)
 	m.noteCommand()
-	client.Pause()
+	if err := m.callPlayer(name, "Pause"); err != nil {
+		log.Printf("mpris %s: Pause failed: %s\n", name, err.Error())
+	}
 }
 func (m *LinuxMediaPlayer) Next() {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
 	log.Printf("mpris %s: Next\n", name)
 	m.noteCommand()
-	client.Next()
+	if err := m.callPlayer(name, "Next"); err != nil {
+		log.Printf("mpris %s: Next failed: %s\n", name, err.Error())
+	}
 }
 func (m *LinuxMediaPlayer) Previous() {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
 	log.Printf("mpris %s: Previous\n", name)
 	m.noteCommand()
-	client.Previous()
+	if err := m.callPlayer(name, "Previous"); err != nil {
+		log.Printf("mpris %s: Previous failed: %s\n", name, err.Error())
+	}
 }
 func (m *LinuxMediaPlayer) FastForward() {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
-	pos := client.GetPosition()
+	pos, err := m.position(name)
+	if err != nil {
+		log.Printf("mpris %s: unable to get position: %s\n", name, err.Error())
+		return
+	}
 
 	newPos := pos + 10000
 	log.Printf("mpris %s: SeekTo fast-forward from %d to %d\n", name, pos, newPos)
 	m.noteCommand()
-	client.SeekTo(newPos)
+	if err := m.callPlayer(name, "Seek", newPos); err != nil {
+		log.Printf("mpris %s: Seek failed: %s\n", name, err.Error())
+	}
 }
 func (m *LinuxMediaPlayer) Rewind() {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
-	pos := client.GetPosition()
+	pos, err := m.position(name)
+	if err != nil {
+		log.Printf("mpris %s: unable to get position: %s\n", name, err.Error())
+		return
+	}
 
 	newPos := pos - 10000
 	if newPos < 0 {
@@ -164,8 +188,9 @@ func (m *LinuxMediaPlayer) Rewind() {
 	}
 	log.Printf("mpris %s: SeekTo rewind from %d to %d\n", name, pos, newPos)
 	m.noteCommand()
-	client.SeekTo(newPos)
-
+	if err := m.callPlayer(name, "Seek", newPos); err != nil {
+		log.Printf("mpris %s: Seek failed: %s\n", name, err.Error())
+	}
 }
 func (m *LinuxMediaPlayer) VolumeUp() {
 	v, err := m.paClient.Volume()
@@ -204,46 +229,57 @@ func (m *LinuxMediaPlayer) Unmute() {
 }
 
 func (m *LinuxMediaPlayer) Shuffle(shuffle bool) {
-	_, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
 	log.Printf("mpris %s: SetShuffle %t\n", name, shuffle)
-	obj := m.mprisConn.Object(name, dbus.ObjectPath("/org/mpris/MediaPlayer2"))
-	call := obj.Call(
-		"org.freedesktop.DBus.Properties.Set",
-		0,
-		"org.mpris.MediaPlayer2.Player",
-		"Shuffle",
-		dbus.MakeVariant(shuffle),
-	)
-	if call.Err != nil {
-		log.Printf("mpris %s: error setting shuffle: %s\n", name, call.Err.Error())
+	obj := m.mprisConn.Object(name, dbus.ObjectPath(mprisObjectPath))
+	ctx, cancel := context.WithTimeout(context.Background(), linuxMediaPlayerCallTimeout)
+	defer cancel()
+	err := callMPRISWithContext(ctx, obj, "org.freedesktop.DBus.Properties.Set", mprisPlayerInterface, "Shuffle", dbus.MakeVariant(shuffle))
+	if err != nil {
+		log.Printf("mpris %s: error setting shuffle: %s\n", name, err.Error())
 	}
 }
 
 func (m *LinuxMediaPlayer) IsPlaying() bool {
-	client, name, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return false
 	}
 
-	status := client.GetPlaybackStatus()
-	if status == mpris.PlaybackPlaying {
+	ctx, cancel := context.WithTimeout(context.Background(), linuxMediaPlayerStatusTimeout)
+	defer cancel()
+
+	status, err := m.playbackStatus(ctx, name)
+	if err != nil {
+		log.Printf("mpris %s: unable to get playback status: %s\n", name, err.Error())
+		return false
+	}
+
+	playing := status == string(mpris.PlaybackPlaying)
+	if playing {
 		m.markResponsive(name)
 	}
 
-	return status == mpris.PlaybackPlaying
+	return playing
 }
 func (m *LinuxMediaPlayer) IsShuffle() bool {
-	client, _, ok := m.currentMPRISClient()
+	name, ok := m.currentPlayerName()
 	if !ok {
 		return false
 	}
 
-	status := client.GetShuffle()
-	return status
+	variant, err := m.playerProperty(name, "Shuffle")
+	if err != nil {
+		log.Printf("mpris %s: unable to get shuffle: %s\n", name, err.Error())
+		return false
+	}
+
+	shuffle, _ := variant.Value().(bool)
+	return shuffle
 }
 func (m *LinuxMediaPlayer) IsMuted() bool {
 	muted, err := m.paClient.Mute()
@@ -256,8 +292,8 @@ func (m *LinuxMediaPlayer) IsMuted() bool {
 }
 
 func (m *LinuxMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
-	client, name, ok := m.currentMPRISClient()
-	if !ok || client.GetPlaybackStatus() != mpris.PlaybackPlaying {
+	name, ok := m.currentPlayerName()
+	if !ok || !m.IsPlaying() {
 		return nil
 	}
 
@@ -273,10 +309,8 @@ func (m *LinuxMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
 }
 
 func (m *LinuxMediaPlayer) getMetadata(name string) map[string]dbus.Variant {
-	obj := m.mprisConn.Object(name, dbus.ObjectPath("/org/mpris/MediaPlayer2"))
-
-	var variant dbus.Variant
-	if err := obj.Call("org.freedesktop.DBus.Properties.Get", 0, "org.mpris.MediaPlayer2.Player", "Metadata").Store(&variant); err != nil {
+	variant, err := m.playerProperty(name, "Metadata")
+	if err != nil {
 		log.Printf("mpris %s: error getting metadata: %s\n", name, err.Error())
 		return nil
 	}
@@ -288,6 +322,52 @@ func (m *LinuxMediaPlayer) getMetadata(name string) map[string]dbus.Variant {
 	}
 
 	return metadata
+}
+
+// callPlayer invokes a method on the MPRIS player interface, giving up after linuxMediaPlayerCallTimeout.
+func (m *LinuxMediaPlayer) callPlayer(name, method string, args ...interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), linuxMediaPlayerCallTimeout)
+	defer cancel()
+
+	obj := m.mprisConn.Object(name, dbus.ObjectPath(mprisObjectPath))
+	return callMPRISWithContext(ctx, obj, mprisPlayerInterface+"."+method, args...)
+}
+
+// playerProperty reads a property of the MPRIS player interface, giving up after linuxMediaPlayerCallTimeout.
+func (m *LinuxMediaPlayer) playerProperty(name, property string) (dbus.Variant, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), linuxMediaPlayerCallTimeout)
+	defer cancel()
+
+	return m.playerPropertyContext(ctx, name, property)
+}
+
+func (m *LinuxMediaPlayer) playerPropertyContext(ctx context.Context, name, property string) (dbus.Variant, error) {
+	obj := m.mprisConn.Object(name, dbus.ObjectPath(mprisObjectPath))
+	call := obj.Go("org.freedesktop.DBus.Properties.Get", 0, make(chan *dbus.Call, 1), mprisPlayerInterface, property)
+
+	select {
+	case <-ctx.Done():
+		return dbus.Variant{}, ctx.Err()
+	case call := <-call.Done:
+		var variant dbus.Variant
+		if err := call.Store(&variant); err != nil {
+			return dbus.Variant{}, err
+		}
+		return variant, nil
+	}
+}
+
+func (m *LinuxMediaPlayer) position(name string) (int64, error) {
+	variant, err := m.playerProperty(name, "Position")
+	if err != nil {
+		return 0, err
+	}
+
+	pos, ok := variant.Value().(int64)
+	if !ok {
+		return 0, fmt.Errorf("position had unexpected type %T", variant.Value())
+	}
+	return pos, nil
 }
 
 func metadataString(metadata map[string]dbus.Variant, key string) string {
@@ -329,7 +409,7 @@ func metadataStrings(metadata map[string]dbus.Variant, key string) []string {
 }
 
 func (m *LinuxMediaPlayer) PlayURI(ctx context.Context, uri string) error {
-	_, name, ok := m.clientForPlay()
+	name, ok := m.playerNameForPlay()
 	if !ok {
 		return errors.New("no MPRIS media player available")
 	}
@@ -397,10 +477,20 @@ func (m *LinuxMediaPlayer) verifyPlaying(name string, seq uint64) {
 			log.Printf("mpris %s: no playback %s after play command (status %q); marking unresponsive\n", name, linuxMediaPlayerPlayVerifyDelay, status)
 		}
 
-		m.lock.Lock()
-		m.unresponsive[name] = time.Now()
-		m.lock.Unlock()
+		m.markUnresponsive(name, "")
 	})
+}
+
+// markUnresponsive flags the named player so another instance is preferred on the next play command. A non-empty
+// reason is logged; callers that have already logged why pass an empty one.
+func (m *LinuxMediaPlayer) markUnresponsive(name, reason string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	if reason != "" {
+		log.Printf("mpris %s: %s; marking unresponsive\n", name, reason)
+	}
+	m.unresponsive[name] = time.Now()
 }
 
 func (m *LinuxMediaPlayer) markResponsive(name string) {
@@ -414,23 +504,16 @@ func (m *LinuxMediaPlayer) markResponsive(name string) {
 }
 
 func (m *LinuxMediaPlayer) playbackStatus(ctx context.Context, name string) (string, error) {
-	obj := m.mprisConn.Object(name, dbus.ObjectPath(mprisObjectPath))
-	call := obj.Go("org.freedesktop.DBus.Properties.Get", 0, make(chan *dbus.Call, 1), mprisPlayerInterface, "PlaybackStatus")
-
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case call := <-call.Done:
-		var variant dbus.Variant
-		if err := call.Store(&variant); err != nil {
-			return "", err
-		}
-		status, ok := variant.Value().(string)
-		if !ok {
-			return "", fmt.Errorf("playback status had unexpected type %T", variant.Value())
-		}
-		return status, nil
+	variant, err := m.playerPropertyContext(ctx, name, "PlaybackStatus")
+	if err != nil {
+		return "", err
 	}
+
+	status, ok := variant.Value().(string)
+	if !ok {
+		return "", fmt.Errorf("playback status had unexpected type %T", variant.Value())
+	}
+	return status, nil
 }
 
 // startSignalListener subscribes to MPRIS PropertiesChanged signals so that a player flagged as unresponsive is
@@ -537,26 +620,26 @@ func chooseMPRISPlayer(names []string, current string, unresponsive map[string]t
 	return ""
 }
 
-// currentMPRISClient returns the player to read state from or send non-play commands to. It only changes player when
+// currentPlayerName returns the player to read state from or send non-play commands to. It only changes player when
 // the current one has left the bus, so state polls never flip control to another application.
-func (m *LinuxMediaPlayer) currentMPRISClient() (*mpris.Player, string, bool) {
-	return m.resolveMPRISClient(false)
+func (m *LinuxMediaPlayer) currentPlayerName() (string, bool) {
+	return m.resolvePlayer(false)
 }
 
-// clientForPlay returns the player to send a play command to. Unlike currentMPRISClient it will also move away from
+// playerNameForPlay returns the player to send a play command to. Unlike currentPlayerName it will also move away from
 // a player which was flagged unresponsive by an earlier play command.
-func (m *LinuxMediaPlayer) clientForPlay() (*mpris.Player, string, bool) {
-	return m.resolveMPRISClient(true)
+func (m *LinuxMediaPlayer) playerNameForPlay() (string, bool) {
+	return m.resolvePlayer(true)
 }
 
-func (m *LinuxMediaPlayer) resolveMPRISClient(demote bool) (*mpris.Player, string, bool) {
+func (m *LinuxMediaPlayer) resolvePlayer(demote bool) (string, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	names, err := mpris.List(m.mprisConn)
 	if err != nil {
 		log.Printf("mpris: unable to list media players: %s\n", err.Error())
-		return nil, "", false
+		return "", false
 	}
 
 	// Forget unresponsive flags for instances that have left the bus or that have expired.
@@ -574,26 +657,24 @@ func (m *LinuxMediaPlayer) resolveMPRISClient(demote bool) (*mpris.Player, strin
 	}
 
 	chosen := chooseMPRISPlayer(names, m.mprisInstanceName, m.unresponsive, demote)
-	if chosen != "" && chosen == m.mprisInstanceName && m.mprisClient != nil {
-		return m.mprisClient, chosen, true
+	if chosen != "" && chosen == m.mprisInstanceName {
+		return chosen, true
 	}
 
 	if chosen == "" {
 		if m.mprisInstanceName != "" {
 			log.Printf("mpris: media player %q is no longer available and no replacement was found\n", m.mprisInstanceName)
 		}
-		m.mprisClient = nil
 		m.mprisInstanceName = ""
-		return nil, "", false
+		return "", false
 	}
 
 	oldName := m.mprisInstanceName
 	m.mprisInstanceName = chosen
-	m.mprisClient = mpris.New(m.mprisConn, chosen)
 	if oldName == "" {
 		log.Printf("mpris: media player %q found\n", chosen)
 	} else {
 		log.Printf("mpris: switching media player from %q to %q\n", oldName, chosen)
 	}
-	return m.mprisClient, chosen, true
+	return chosen, true
 }

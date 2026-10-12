@@ -145,13 +145,13 @@ func TestPlayVerificationFlagsHungPlayerAndFailsOver(t *testing.T) {
 	waitFor(t, verifySettle, "hung player to be flagged", func() bool { return m.isFlagged(hung) })
 
 	// Reads must not flip control to another application.
-	if _, got, ok := m.currentMPRISClient(); !ok || got != hung {
+	if got, ok := m.currentPlayerName(); !ok || got != hung {
 		t.Errorf("state read moved to %q (ok=%t), want to stay on %q", got, ok, hung)
 	}
 
 	// A play command moves away from the flagged player. Other players on the bus (e.g. a real one on a
 	// developer machine) are acceptable targets; the flagged one is not.
-	if _, got, ok := m.clientForPlay(); !ok || got == hung {
+	if got, ok := m.playerNameForPlay(); !ok || got == hung {
 		t.Errorf("play command stayed on flagged player %q (ok=%t); healthy fake is %q", got, ok, healthy)
 	}
 
@@ -186,5 +186,24 @@ func TestPauseCancelsPendingPlayVerification(t *testing.T) {
 
 	if m.isFlagged(name) {
 		t.Errorf("player was flagged although the user paused before the check")
+	}
+}
+
+func TestPlayOnFrozenPlayerReturnsAndFlagsImmediately(t *testing.T) {
+	t.Parallel()
+
+	// The handler never answers within the call timeout, like a process that is stopped or deadlocked.
+	frozen, _ := startFakeMPRISPlayer(t, func(*prop.Properties) { time.Sleep(3 * linuxMediaPlayerCallTimeout) })
+	m := newTestController(t, frozen)
+
+	start := time.Now()
+	m.Play()
+	elapsed := time.Since(start)
+
+	if elapsed > linuxMediaPlayerCallTimeout+time.Second {
+		t.Errorf("Play blocked for %s on a frozen player, want it bounded by %s", elapsed, linuxMediaPlayerCallTimeout)
+	}
+	if !m.isFlagged(frozen) {
+		t.Errorf("frozen player was not flagged unresponsive after its Play call timed out")
 	}
 }
