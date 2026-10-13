@@ -83,7 +83,7 @@ playback:
   mpris-prefix: org.mpris.MediaPlayer2.spotifyd   # local only: only control players with this D-Bus name prefix
 ```
 
-`connect-device` and `mpris-prefix` are rejected with `control: spotify`. With `control: local`, deskpadd refuses
+`connect-device` and `mpris-prefix` are ignored, with a warning in the log, under `control: spotify`. With `control: local`, deskpadd refuses
 to start if the D-Bus session bus or PulseAudio isn't reachable, rather than quietly switching modes. The older
 `use-mpris` key still works when `playback.control` is unset (`true` is `local`, `false` is `spotify`) and logs a
 deprecation notice.

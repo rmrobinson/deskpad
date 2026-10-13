@@ -29,6 +29,8 @@ type playbackSettings struct {
 	MPRISPrefix string
 	// Legacy is set when the control mode was taken from the deprecated use-mpris key.
 	Legacy bool
+	// Ignored lists configured keys that don't apply to the control mode and were dropped.
+	Ignored []string
 }
 
 // loadPlaybackSettings reads the playback.* keys. The deprecated use-mpris bool is honoured when playback.control
@@ -57,8 +59,17 @@ func loadPlaybackSettings(v *viper.Viper) (playbackSettings, error) {
 		s.Control = playbackControlSpotify
 	}
 
-	if s.Control == playbackControlSpotify && (s.ConnectDevice != "" || s.MPRISPrefix != "") {
-		return s, fmt.Errorf("playback.connect-device and playback.mpris-prefix only apply when playback.control is %q", playbackControlLocal)
+	// These only mean something for local control. Leaving them in place while switching to Spotify control is
+	// harmless, so drop them and say so rather than refusing to start.
+	if s.Control == playbackControlSpotify {
+		if s.ConnectDevice != "" {
+			s.Ignored = append(s.Ignored, "playback.connect-device")
+			s.ConnectDevice = ""
+		}
+		if s.MPRISPrefix != "" {
+			s.Ignored = append(s.Ignored, "playback.mpris-prefix")
+			s.MPRISPrefix = ""
+		}
 	}
 
 	return s, nil

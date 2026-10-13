@@ -53,17 +53,24 @@ ARCH="$(dpkg --print-architecture)"
 # Map each shared library the binary links directly to the package that owns it. ldd prints /lib/... paths, which
 # dpkg doesn't know on a merged-/usr system, so resolve the real path first. Transitive libraries are their owners'
 # own dependencies and don't belong here.
-DEPS="$(
-  readelf -d "$BIN" | awk '/\(NEEDED\)/{gsub(/[\[\]]/, "", $NF); print $NF}' | while read -r soname; do
-    path="$(ldd "$BIN" | awk -v n="$soname" '$1 == n {print $3}')"
-    [ -n "$path" ] || continue
-    dpkg -S "$(readlink -f "$path")" 2>/dev/null | head -n1 | cut -d: -f1
-  done | sort -u | paste -sd, - | sed 's/,/, /g'
-)"
-if [ -z "$DEPS" ]; then
+LDD_OUT="$(ldd "$BIN")"
+PACKAGES=()
+while read -r soname; do
+  path="$(awk -v n="$soname" '$1 == n {print $3}' <<<"$LDD_OUT")"
+  [ -n "$path" ] || continue
+  owner="$(dpkg -S "$(readlink -f "$path")" 2>/dev/null | head -n1 | cut -d: -f1 || true)"
+  if [ -z "$owner" ]; then
+    echo "warning: no package owns $path ($soname); it will not be listed as a dependency" >&2
+    continue
+  fi
+  PACKAGES+=("$owner")
+done < <(readelf -d "$BIN" | awk '/\(NEEDED\)/{gsub(/[\[\]]/, "", $NF); print $NF}')
+
+if [ "${#PACKAGES[@]}" -eq 0 ]; then
   echo "could not work out the runtime dependencies from the built binary" >&2
   exit 1
 fi
+DEPS="$(printf '%s\n' "${PACKAGES[@]}" | sort -u | paste -sd, - | sed 's/,/, /g')"
 
 STAGE="$WORK/stage"
 install -Dm0755 "$BIN" "$STAGE/usr/bin/spotifyd"

@@ -17,6 +17,9 @@ import (
 
 const linuxMediaPlayerVolumeStep = 0.05
 
+// linuxMediaPlayerSeekStepMicros is how far fast-forward and rewind move, in the microseconds MPRIS uses.
+const linuxMediaPlayerSeekStepMicros = int64(10 * time.Second / time.Microsecond)
+
 const (
 	// linuxMediaPlayerCallTimeout bounds every call to a player so one that has stopped answering can't block the
 	// key press handler or state polling. A healthy player replies in milliseconds.
@@ -25,6 +28,7 @@ const (
 	// that a launch which didn't produce playback leaves a line in the log.
 	linuxMediaPlayerLaunchCheckDelay = 5 * time.Second
 
+	mprisBusNamePrefix   = "org.mpris.MediaPlayer2."
 	mprisObjectPath      = "/org/mpris/MediaPlayer2"
 	mprisPlayerInterface = "org.mpris.MediaPlayer2.Player"
 )
@@ -125,36 +129,23 @@ func (m *LinuxMediaPlayer) command(method string) {
 }
 
 func (m *LinuxMediaPlayer) FastForward() {
-	m.seekBy("fast-forward", 10000)
+	m.seek("fast-forward", linuxMediaPlayerSeekStepMicros)
 }
 
 func (m *LinuxMediaPlayer) Rewind() {
-	m.seekBy("rewind", -10000)
+	m.seek("rewind", -linuxMediaPlayerSeekStepMicros)
 }
 
-func (m *LinuxMediaPlayer) seekBy(what string, delta int64) {
+// seek moves the playback position by a relative offset. MPRIS Seek takes microseconds relative to the current
+// position, and clamps to the start of the track, so no position needs to be read first.
+func (m *LinuxMediaPlayer) seek(what string, offsetMicros int64) {
 	name, ok := m.currentPlayerName()
 	if !ok {
 		return
 	}
 
-	variant, err := m.playerProperty(name, "Position")
-	if err != nil {
-		log.Printf("mpris %s: unable to get position: %s\n", name, err.Error())
-		return
-	}
-	pos, ok := variant.Value().(int64)
-	if !ok {
-		log.Printf("mpris %s: position had unexpected type %T\n", name, variant.Value())
-		return
-	}
-
-	newPos := pos + delta
-	if newPos < 0 {
-		newPos = 0
-	}
-	log.Printf("mpris %s: SeekTo %s from %d to %d\n", name, what, pos, newPos)
-	if err := m.callPlayer(name, "Seek", newPos); err != nil {
+	log.Printf("mpris %s: Seek %s by %dus\n", name, what, offsetMicros)
+	if err := m.callPlayer(name, "Seek", offsetMicros); err != nil {
 		log.Printf("mpris %s: Seek failed: %s\n", name, err.Error())
 	}
 }
@@ -218,6 +209,10 @@ func (m *LinuxMediaPlayer) IsPlaying() bool {
 		return false
 	}
 
+	return m.isPlaying(name)
+}
+
+func (m *LinuxMediaPlayer) isPlaying(name string) bool {
 	status, err := m.playbackStatus(name)
 	if err != nil {
 		log.Printf("mpris %s: unable to get playback status: %s\n", name, err.Error())
@@ -255,7 +250,7 @@ func (m *LinuxMediaPlayer) IsMuted() bool {
 
 func (m *LinuxMediaPlayer) CurrentlyPlaying() *ui.MediaItem {
 	name, ok := m.currentPlayerName()
-	if !ok || !m.IsPlaying() {
+	if !ok || !m.isPlaying(name) {
 		return nil
 	}
 
@@ -380,7 +375,7 @@ func (m *LinuxMediaPlayer) logIfNotPlaying() {
 // restarted under a new name, or that only appeared after startup, is picked up. The current instance is kept while
 // it is still on the bus.
 func (m *LinuxMediaPlayer) currentPlayerName() (string, bool) {
-	names, err := mpris.List(m.mprisConn)
+	names, err := m.listPlayers()
 	if err != nil {
 		log.Printf("mpris: unable to list media players: %s\n", err.Error())
 		return "", false
@@ -404,6 +399,32 @@ func (m *LinuxMediaPlayer) currentPlayerName() (string, bool) {
 	}
 
 	return chosen, chosen != ""
+}
+
+// listPlayers returns the MPRIS players on the session bus, giving up after linuxMediaPlayerCallTimeout.
+func (m *LinuxMediaPlayer) listPlayers() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), linuxMediaPlayerCallTimeout)
+	defer cancel()
+
+	call := m.mprisConn.BusObject().Go("org.freedesktop.DBus.ListNames", 0, make(chan *dbus.Call, 1))
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case call := <-call.Done:
+		var all []string
+		if err := call.Store(&all); err != nil {
+			return nil, err
+		}
+
+		var players []string
+		for _, name := range all {
+			if strings.HasPrefix(name, mprisBusNamePrefix) {
+				players = append(players, name)
+			}
+		}
+		return players, nil
+	}
 }
 
 // choosePlayer keeps the current player while it is present, otherwise takes the first available one.

@@ -29,6 +29,15 @@ type fakeMPRISPlayer struct {
 	openUriCalls int32
 	playCalls    int32
 	pauseCalls   int32
+	seekOffset   int64
+	seekCalls    int32
+}
+
+// SeekBy is exported on the bus as Seek; the Go name avoids go vet's io.Seeker signature check.
+func (f *fakeMPRISPlayer) SeekBy(offset int64) *dbus.Error {
+	atomic.StoreInt64(&f.seekOffset, offset)
+	atomic.AddInt32(&f.seekCalls, 1)
+	return nil
 }
 
 func (f *fakeMPRISPlayer) Play() *dbus.Error {
@@ -76,7 +85,7 @@ func startFakeMPRISPlayer(t *testing.T, status string, onPlay func()) (string, *
 	})
 
 	fake := &fakeMPRISPlayer{props: props, onPlay: onPlay}
-	if err := conn.Export(fake, "/org/mpris/MediaPlayer2", fakeMPRISPlayerInterface); err != nil {
+	if err := conn.ExportWithMap(fake, map[string]string{"SeekBy": "Seek"}, "/org/mpris/MediaPlayer2", fakeMPRISPlayerInterface); err != nil {
 		t.Fatalf("export fake player: %s", err)
 	}
 
@@ -250,5 +259,25 @@ func TestCommandsOnFrozenPlayerAreBounded(t *testing.T) {
 	m.Play()
 	if elapsed := time.Since(start); elapsed > linuxMediaPlayerCallTimeout+time.Second {
 		t.Errorf("Play blocked for %s on a frozen player, want it bounded by %s", elapsed, linuxMediaPlayerCallTimeout)
+	}
+}
+
+func TestSeekSendsRelativeOffsetInMicroseconds(t *testing.T) {
+	t.Parallel()
+
+	name, fake := startFakeMPRISPlayer(t, "Playing", nil)
+	m := newTestController(t, WithMPRISNamePrefix(name))
+
+	m.FastForward()
+	if got, want := atomic.LoadInt64(&fake.seekOffset), int64(10_000_000); got != want {
+		t.Errorf("FastForward sent Seek(%d), want Seek(%d)", got, want)
+	}
+
+	m.Rewind()
+	if got, want := atomic.LoadInt64(&fake.seekOffset), int64(-10_000_000); got != want {
+		t.Errorf("Rewind sent Seek(%d), want Seek(%d)", got, want)
+	}
+	if got := atomic.LoadInt32(&fake.seekCalls); got != 2 {
+		t.Errorf("Seek called %d times, want 2", got)
 	}
 }

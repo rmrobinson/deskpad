@@ -93,6 +93,39 @@ func TestFilterMPRISNames(t *testing.T) {
 	}
 }
 
+func TestFindConnectDeviceSkipsUntargetableAndPrefersActive(t *testing.T) {
+	devices := []spotify.PlayerDevice{
+		{ID: "", Name: "deskpad"},
+		{ID: "stale-id", Name: "deskpad"},
+		{ID: "live-id", Name: "DeskPad", Active: true},
+	}
+	if id, ok := findConnectDevice(devices, "deskpad"); !ok || id != "live-id" {
+		t.Errorf("findConnectDevice = (%q, %t), want the active device live-id", id, ok)
+	}
+
+	if _, ok := findConnectDevice([]spotify.PlayerDevice{{ID: "", Name: "deskpad"}}, "deskpad"); ok {
+		t.Errorf("findConnectDevice used a device with no ID")
+	}
+}
+
+func TestPlayOptionsFor(t *testing.T) {
+	playlist := playOptionsFor("dev", "spotify:playlist:abc")
+	if playlist.PlaybackContext == nil || string(*playlist.PlaybackContext) != "spotify:playlist:abc" || len(playlist.URIs) != 0 {
+		t.Errorf("playlist options = %+v, want a context play", playlist)
+	}
+	if playlist.PlaybackOffset == nil || playlist.PlaybackOffset.Position == nil || *playlist.PlaybackOffset.Position != 0 {
+		t.Errorf("playlist options should start at the first item, got offset %+v", playlist.PlaybackOffset)
+	}
+	if playlist.DeviceID == nil || *playlist.DeviceID != "dev" {
+		t.Errorf("playlist options device = %v, want dev", playlist.DeviceID)
+	}
+
+	track := playOptionsFor("dev", "spotify:track:xyz")
+	if track.PlaybackContext != nil || len(track.URIs) != 1 || track.URIs[0] != "spotify:track:xyz" {
+		t.Errorf("track options = %+v, want a direct uris play", track)
+	}
+}
+
 func TestFindConnectDevice(t *testing.T) {
 	devices := []spotify.PlayerDevice{
 		{ID: "mac-id", Name: "Robert’s MacBook Pro"},

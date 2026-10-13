@@ -1,7 +1,8 @@
 [Unit]
 Description=spotifyd Spotify Connect receiver (controlled by deskpad)
-After=network-online.target pulseaudio.service
-Wants=network-online.target
+# Order after the audio server where there is one (a user manager has no network-online.target; Restart= covers the
+# network not being up yet). The unit names that don't exist on a given host are ignored.
+After=pulseaudio.service pipewire-pulse.service
 
 [Service]
 # A systemd --user unit: spotifyd needs the user's PulseAudio socket and session D-Bus (MPRIS).

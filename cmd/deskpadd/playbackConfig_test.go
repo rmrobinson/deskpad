@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -62,14 +63,21 @@ func TestLoadPlaybackSettings(t *testing.T) {
 			wantErrMsg: true,
 		},
 		{
-			name:       "local-only keys with Spotify control",
-			values:     map[string]interface{}{"playback.control": "spotify", "playback.connect-device": "deskpad"},
-			wantErrMsg: true,
+			name: "local-only keys are ignored with Spotify control",
+			values: map[string]interface{}{
+				"playback.control":        "spotify",
+				"playback.connect-device": "deskpad",
+				"playback.mpris-prefix":   "org.mpris.MediaPlayer2.spotifyd",
+			},
+			want: playbackSettings{
+				Control: playbackControlSpotify,
+				Ignored: []string{"playback.connect-device", "playback.mpris-prefix"},
+			},
 		},
 		{
-			name:       "local-only keys with legacy use-mpris false",
-			values:     map[string]interface{}{"use-mpris": false, "playback.mpris-prefix": "org.mpris.MediaPlayer2.spotifyd"},
-			wantErrMsg: true,
+			name:   "local-only keys are ignored with legacy use-mpris false",
+			values: map[string]interface{}{"use-mpris": false, "playback.mpris-prefix": "org.mpris.MediaPlayer2.spotifyd"},
+			want:   playbackSettings{Control: playbackControlSpotify, Legacy: true, Ignored: []string{"playback.mpris-prefix"}},
 		},
 	}
 
@@ -90,7 +98,7 @@ func TestLoadPlaybackSettings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("loadPlaybackSettings() error: %s", err)
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("loadPlaybackSettings() = %+v, want %+v", got, tt.want)
 			}
 		})

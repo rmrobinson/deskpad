@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -120,6 +121,9 @@ func main() {
 	playback, err := loadPlaybackSettings(viper.GetViper())
 	if err != nil {
 		log.Fatalf("invalid playback configuration: %s\n", err.Error())
+	}
+	if len(playback.Ignored) > 0 {
+		log.Printf("*** %s ignored: they only apply when playback.control is %q\n", strings.Join(playback.Ignored, " and "), playbackControlLocal)
 	}
 	if playback.Legacy {
 		log.Printf("*** use-mpris is deprecated; set 'playback.control: %s' instead\n", playback.Control)

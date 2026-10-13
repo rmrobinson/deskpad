@@ -33,21 +33,43 @@ func (c *SpotifyConnect) PlayContext(ctx context.Context, deviceName, uri string
 		return fmt.Errorf("spotify connect device %q not found (available: %s)", deviceName, connectDeviceNames(devices))
 	}
 
-	contextURI := spotify.URI(uri)
-	return c.client.PlayOpt(ctx, &spotify.PlayOptions{
-		DeviceID:        &deviceID,
-		PlaybackContext: &contextURI,
-	})
+	return c.client.PlayOpt(ctx, playOptionsFor(deviceID, uri))
 }
 
+// playOptionsFor builds the play request for a URI on a device. Playlists, albums and shows are played as a
+// context from their first item; single tracks and episodes can't be sent as a context and are played directly.
+func playOptionsFor(deviceID spotify.ID, uri string) *spotify.PlayOptions {
+	opts := &spotify.PlayOptions{DeviceID: &deviceID}
+
+	if strings.HasPrefix(uri, "spotify:track:") || strings.HasPrefix(uri, "spotify:episode:") {
+		opts.URIs = []spotify.URI{spotify.URI(uri)}
+		return opts
+	}
+
+	contextURI := spotify.URI(uri)
+	firstItem := 0
+	opts.PlaybackContext = &contextURI
+	opts.PlaybackOffset = &spotify.PlaybackOffset{Position: &firstItem}
+	return opts
+}
+
+// findConnectDevice finds the device with the given name, ignoring case. Devices without an ID (Spotify reports
+// restricted devices that way) can't be targeted, and if the name matches more than one the active one wins.
 func findConnectDevice(devices []spotify.PlayerDevice, name string) (spotify.ID, bool) {
+	var found spotify.ID
 	for _, d := range devices {
-		if strings.EqualFold(d.Name, name) {
+		if d.ID == "" || !strings.EqualFold(d.Name, name) {
+			continue
+		}
+		if d.Active {
 			return d.ID, true
+		}
+		if found == "" {
+			found = d.ID
 		}
 	}
 
-	return "", false
+	return found, found != ""
 }
 
 func connectDeviceNames(devices []spotify.PlayerDevice) string {
