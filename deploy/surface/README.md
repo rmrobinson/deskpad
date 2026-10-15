@@ -23,7 +23,8 @@ On the machine running deskpadd:
   working; they are independent surfaces of the same screens.
 
 The traffic is plain HTTP and the token travels in a header, so keep it on a trusted LAN or put TLS in front
-(`DESKPAD_SERVER` accepts `https://`).
+(`DESKPAD_SERVER` accepts `https://`). The program logs a warning at startup when it will send the token over
+plain `http://` to anything other than this machine.
 
 ## Build (on the Pi)
 
@@ -69,9 +70,14 @@ address, and the keys should fill in within a second or so.
   whose image changed.
 - **Presses.** A key held for 500ms or longer is a long press, matching the daemon's own Stream Deck (`-long-press`
   changes it). Presses made while the daemon is unreachable are dropped, not queued.
-- **Daemon unavailable.** The keys go blank and it retries with backoff, up to 30s between attempts. A silent
-  connection is abandoned after 90s; the daemon sends a heartbeat every 30s.
-- **Stream Deck unplugged.** The process exits and systemd restarts it until the device is back.
+- **Daemon unavailable.** Presses stop being sent at once and it retries with backoff, up to 30s between attempts.
+  The last screen stays on the keys for 10s so a network blip doesn't flash the deck dark, then they go blank. A
+  connection that is silent for 90s is abandoned (the daemon sends a heartbeat every 30s), and so is one that
+  never answers the initial request. The backoff only starts over after a connection has held for 10s.
+- **Odd daemon responses.** A state that doesn't describe a grid with the right number of keys is rejected rather
+  than treated as "all blank", and server-sent events that aren't surface states are ignored.
+- **Stream Deck unplugged.** The process notices (a closed event stream or a failed write), exits, and systemd
+  restarts it until the device is back.
 - **Hardware.** Only the original 15-key Stream Deck is supported, as in the daemon.
 
 ## Options

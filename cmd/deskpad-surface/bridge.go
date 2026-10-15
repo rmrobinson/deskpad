@@ -34,10 +34,15 @@ type bridge struct {
 	longPress time.Duration
 	// idleTimeout is how long the event stream may be silent before it is considered dead.
 	idleTimeout time.Duration
-	// pressTimeout bounds how long a key press waits for the daemon.
-	pressTimeout time.Duration
-	minBackoff   time.Duration
-	maxBackoff   time.Duration
+	// requestTimeout bounds the initial state request and each key press.
+	requestTimeout time.Duration
+	// blankAfter is how long the last screen stays on the keys after the daemon is lost before they go blank. Presses
+	// are not sent in that time, so a brief blip doesn't flash the whole deck dark.
+	blankAfter time.Duration
+	// stableAfter is how long a connection has to last before the retry backoff starts over.
+	stableAfter time.Duration
+	minBackoff  time.Duration
+	maxBackoff  time.Duration
 
 	mu        sync.Mutex
 	connected bool
@@ -45,42 +50,62 @@ type bridge struct {
 	// changed are rewritten. nil means nothing is known to be on the device.
 	painted []string
 	downAt  map[int]time.Time
+	blank   *time.Timer
+
+	presses chan pressRequest
+
+	fatalOnce sync.Once
+	fatalErr  error
+	cancel    context.CancelFunc
+}
+
+type pressRequest struct {
+	key  int
+	kind string
 }
 
 func newBridge(dev keyDevice, server, token string) *bridge {
 	return &bridge{
-		dev:          dev,
-		server:       server,
-		token:        token,
-		client:       &http.Client{},
-		longPress:    500 * time.Millisecond,
-		idleTimeout:  90 * time.Second,
-		pressTimeout: 3 * time.Second,
-		minBackoff:   time.Second,
-		maxBackoff:   30 * time.Second,
-		downAt:       make(map[int]time.Time),
+		dev:            dev,
+		server:         server,
+		token:          token,
+		client:         &http.Client{},
+		longPress:      500 * time.Millisecond,
+		idleTimeout:    90 * time.Second,
+		requestTimeout: 5 * time.Second,
+		blankAfter:     10 * time.Second,
+		stableAfter:    10 * time.Second,
+		minBackoff:     time.Second,
+		maxBackoff:     30 * time.Second,
+		downAt:         make(map[int]time.Time),
+		presses:        make(chan pressRequest, 16),
 	}
 }
 
 // Run keeps the Stream Deck in step with the daemon until ctx is done. A daemon that is unreachable is retried
-// with backoff; an error writing to the Stream Deck itself is returned, since the process can't recover from that
-// and is better restarted.
+// with backoff. A failure of the Stream Deck itself, whether a write error or the device going away, is returned,
+// since the process can't recover from that and is better restarted.
 func (b *bridge) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	b.cancel = cancel
+
 	go b.handleKeys(ctx)
+	go b.sendPresses(ctx)
 
 	backoff := b.minBackoff
 	for ctx.Err() == nil {
-		progressed, err := b.session(ctx)
+		started := time.Now()
+		err := b.session(ctx)
+		b.lost()
 
-		var devErr *deviceError
-		if errors.As(err, &devErr) {
-			return devErr
-		}
 		if ctx.Err() != nil {
 			break
 		}
 
-		if progressed {
+		// Only a connection that held for a while counts as the daemon being back; one that dies straight after
+		// the first state would otherwise be retried every second forever.
+		if time.Since(started) >= b.stableAfter {
 			backoff = b.minBackoff
 		}
 		log.Printf("daemon connection ended: %s; retrying in %s\n", err.Error(), backoff)
@@ -95,22 +120,36 @@ func (b *bridge) Run(ctx context.Context) error {
 		}
 	}
 
-	b.disconnected()
+	if b.fatalErr != nil {
+		return b.fatalErr
+	}
+
+	b.blankNow()
 	return nil
 }
 
+// fail records an unrecoverable Stream Deck failure and stops Run.
+func (b *bridge) fail(err error) {
+	b.fatalOnce.Do(func() {
+		b.fatalErr = &deviceError{err: err}
+		if b.cancel != nil {
+			b.cancel()
+		}
+	})
+}
+
 // session makes one connection to the daemon: it paints the current state, then follows updates until the
-// connection ends. progressed reports whether at least the first state was received.
-func (b *bridge) session(ctx context.Context) (progressed bool, err error) {
-	state, err := fetchState(ctx, b.client, b.server)
+// connection ends.
+func (b *bridge) session(ctx context.Context) error {
+	state, err := fetchState(ctx, b.client, b.server, b.requestTimeout)
 	if err != nil {
-		return false, fmt.Errorf("fetch state: %w", err)
+		return fmt.Errorf("fetch state: %w", err)
 	}
 	if err := b.apply(state); err != nil {
-		return false, err
+		b.fail(errors.Unwrap(err))
+		return err
 	}
 	b.setConnected(true)
-	defer b.disconnected()
 
 	var applyErr error
 	streamCtx, cancel := context.WithCancel(ctx)
@@ -121,13 +160,14 @@ func (b *bridge) session(ctx context.Context) (progressed bool, err error) {
 			return
 		}
 		if applyErr = b.apply(s); applyErr != nil {
+			b.fail(errors.Unwrap(applyErr))
 			cancel()
 		}
 	})
 	if applyErr != nil {
-		return true, applyErr
+		return applyErr
 	}
-	return true, err
+	return err
 }
 
 type deviceError struct{ err error }
@@ -147,6 +187,10 @@ func (b *bridge) apply(state uiState) error {
 		for i := range b.painted {
 			b.painted[i] = "\x00unknown"
 		}
+	}
+
+	if len(state.Keys) != keyCount {
+		log.Printf("daemon surface has %d keys but the stream deck has %d; extra keys are ignored\n", len(state.Keys), keyCount)
 	}
 
 	for i := 0; i < keyCount; i++ {
@@ -187,14 +231,45 @@ func (b *bridge) setConnected(connected bool) {
 	defer b.mu.Unlock()
 
 	b.connected = connected
+	if connected && b.blank != nil {
+		b.blank.Stop()
+		b.blank = nil
+	}
 }
 
-// disconnected blanks the keys, so a stale screen can't be pressed with nothing listening, and forgets what was shown.
-func (b *bridge) disconnected() {
+// lost handles the daemon going away. Key presses stop being sent at once, but the last screen stays visible for
+// blankAfter so a brief network blip doesn't flash the deck dark; if the daemon is still gone then, the keys blank.
+func (b *bridge) lost() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.connected = false
+	if b.blank != nil {
+		b.blank.Stop()
+	}
+	b.blank = time.AfterFunc(b.blankAfter, func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		if !b.connected {
+			b.blankLocked()
+		}
+	})
+}
+
+// blankNow clears the keys and forgets what was shown, so the next connection repaints everything.
+func (b *bridge) blankNow() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.blank != nil {
+		b.blank.Stop()
+		b.blank = nil
+	}
+	b.blankLocked()
+}
+
+func (b *bridge) blankLocked() {
 	if b.painted == nil {
 		return
 	}
@@ -205,7 +280,8 @@ func (b *bridge) disconnected() {
 	}
 }
 
-// handleKeys turns Stream Deck events into key presses on the daemon.
+// handleKeys turns Stream Deck events into queued key presses. It never waits on the daemon, so a slow request
+// can't make later events look as if they happened late, which would turn taps into long presses.
 func (b *bridge) handleKeys(ctx context.Context) {
 	events := b.dev.Subscribe()
 
@@ -215,6 +291,7 @@ func (b *bridge) handleKeys(ctx context.Context) {
 			return
 		case event, ok := <-events:
 			if !ok {
+				b.fail(errors.New("event stream closed; the device was probably unplugged"))
 				return
 			}
 
@@ -239,22 +316,36 @@ func (b *bridge) handleKeys(ctx context.Context) {
 				if time.Since(down) >= b.longPress {
 					kind = "long"
 				}
-				b.press(ctx, event.Key, kind, connected)
+
+				if !connected {
+					log.Printf("key %d %s press dropped: not connected to the daemon\n", event.Key, kind)
+					continue
+				}
+
+				select {
+				case b.presses <- pressRequest{key: event.Key, kind: kind}:
+				default:
+					log.Printf("key %d %s press dropped: daemon is not keeping up\n", event.Key, kind)
+				}
 			}
 		}
 	}
 }
 
-func (b *bridge) press(ctx context.Context, key int, kind string, connected bool) {
-	if !connected {
-		log.Printf("key %d %s press dropped: not connected to the daemon\n", key, kind)
-		return
-	}
+// sendPresses delivers queued presses to the daemon in order.
+func (b *bridge) sendPresses(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case p := <-b.presses:
+			reqCtx, cancel := context.WithTimeout(ctx, b.requestTimeout)
+			err := pressKey(reqCtx, b.client, b.server, b.token, p.key, p.kind)
+			cancel()
 
-	ctx, cancel := context.WithTimeout(ctx, b.pressTimeout)
-	defer cancel()
-
-	if err := pressKey(ctx, b.client, b.server, b.token, key, kind); err != nil {
-		log.Printf("key %d %s press failed: %s\n", key, kind, err.Error())
+			if err != nil {
+				log.Printf("key %d %s press failed: %s\n", p.key, p.kind, err.Error())
+			}
+		}
 	}
 }

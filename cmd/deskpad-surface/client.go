@@ -28,6 +28,19 @@ type uiState struct {
 	Keys []*string `json:"keys"`
 }
 
+// validate rejects a payload that can't be a real surface state, such as an empty object from an error page that
+// still came back 200, so that it isn't mistaken for "every key is blank".
+func (s uiState) validate() error {
+	if s.Grid.Rows <= 0 || s.Grid.Columns <= 0 {
+		return fmt.Errorf("state has no grid (%dx%d)", s.Grid.Rows, s.Grid.Columns)
+	}
+	if want := s.Grid.Rows * s.Grid.Columns; len(s.Keys) != want {
+		return fmt.Errorf("state has %d keys for a %dx%d grid", len(s.Keys), s.Grid.Rows, s.Grid.Columns)
+	}
+
+	return nil
+}
+
 const pngDataURLPrefix = "data:image/png;base64,"
 
 // decodeKeyImage decodes a key image data URL as sent by the daemon.
@@ -50,8 +63,11 @@ func decodeKeyImage(dataURL string) (image.Image, error) {
 }
 
 // fetchState reads the current surface state once.
-func fetchState(ctx context.Context, client *http.Client, server string) (uiState, error) {
+func fetchState(ctx context.Context, client *http.Client, server string, timeout time.Duration) (uiState, error) {
 	var state uiState
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/api/ui/state", nil)
 	if err != nil {
@@ -70,6 +86,9 @@ func fetchState(ctx context.Context, client *http.Client, server string) (uiStat
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&state); err != nil {
 		return state, fmt.Errorf("decode state: %w", err)
 	}
+	if err := state.validate(); err != nil {
+		return state, err
+	}
 
 	return state, nil
 }
@@ -80,6 +99,12 @@ func fetchState(ctx context.Context, client *http.Client, server string) (uiStat
 func streamStates(ctx context.Context, client *http.Client, server string, idle time.Duration, onState func(uiState)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// The daemon sends a heartbeat comment every 30s, so silence means the connection is dead even if TCP hasn't
+	// noticed. The watchdog is armed before the request, so a daemon that accepts the connection and never replies is
+	// abandoned too, and every line received pushes it back. Cancelling the request unblocks whatever is waiting.
+	watchdog := time.AfterFunc(idle, cancel)
+	defer watchdog.Stop()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/api/ui/events", nil)
 	if err != nil {
@@ -97,15 +122,13 @@ func streamStates(ctx context.Context, client *http.Client, server string, idle 
 		return fmt.Errorf("events request returned %s", resp.Status)
 	}
 
-	// The daemon sends a heartbeat comment every 30s, so silence means the connection is dead even if the TCP
-	// connection hasn't noticed. Cancelling the request unblocks the read below.
-	watchdog := time.AfterFunc(idle, cancel)
-	defer watchdog.Stop()
-
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8<<20)
 
-	var data []string
+	var (
+		data      []string
+		eventName string
+	)
 	for scanner.Scan() {
 		watchdog.Reset(idle)
 
@@ -116,15 +139,29 @@ func streamStates(ctx context.Context, client *http.Client, server string, idle 
 				continue
 			}
 
+			payload := strings.Join(data, "\n")
+			name := eventName
+			data, eventName = data[:0], ""
+
+			// The daemon only sends unnamed events. Anything else isn't a surface state, so leave it alone.
+			if name != "" && name != "message" {
+				continue
+			}
+
 			var state uiState
-			if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &state); err != nil {
+			if err := json.Unmarshal([]byte(payload), &state); err != nil {
 				return fmt.Errorf("decode event: %w", err)
 			}
-			data = data[:0]
+			if err := state.validate(); err != nil {
+				return fmt.Errorf("event: %w", err)
+			}
 			onState(state)
 
 		case strings.HasPrefix(line, ":"):
 			// comment, i.e. a heartbeat
+
+		case strings.HasPrefix(line, "event:"):
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 
 		case strings.HasPrefix(line, "data:"):
 			data = append(data, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))

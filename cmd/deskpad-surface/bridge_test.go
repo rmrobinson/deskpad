@@ -98,12 +98,27 @@ func keyImage(t *testing.T, c color.Color) *string {
 	return &s
 }
 
+// stateWith builds a valid 3x5 state with the given keys first and the rest blank.
 func stateWith(keys ...*string) uiState {
 	var s uiState
 	s.CurrentScreen.Name = "home"
 	s.Grid.Rows, s.Grid.Columns = 3, 5
-	s.Keys = keys
+	s.Keys = make([]*string, 15)
+	copy(s.Keys, keys)
 	return s
+}
+
+// stateJSON is stateWith as the daemon would send it.
+func stateJSON(screen string, firstKey *string) string {
+	keys := make([]string, 15)
+	for i := range keys {
+		keys[i] = "null"
+	}
+	if firstKey != nil {
+		keys[0] = fmt.Sprintf("%q", *firstKey)
+	}
+
+	return fmt.Sprintf(`{"currentScreen":{"name":%q},"grid":{"rows":3,"columns":5},"keys":[%s]}`, screen, strings.Join(keys, ","))
 }
 
 func TestDecodeKeyImage(t *testing.T) {
@@ -173,7 +188,7 @@ func TestApplyIgnoresKeysBeyondTheDevice(t *testing.T) {
 	b := newBridge(dev, "http://unused", "")
 
 	img := keyImage(t, color.RGBA{B: 255, A: 255})
-	if err := b.apply(stateWith(img, img, img, img)); err != nil {
+	if err := b.apply(stateWith(img, img, img, img)); err != nil { // 15 keys, only 2 on the device
 		t.Fatal(err)
 	}
 
@@ -211,13 +226,13 @@ func TestApplyReturnsDeviceErrors(t *testing.T) {
 	}
 }
 
-func TestDisconnectedBlanksKeysAndForgetsState(t *testing.T) {
+func TestBlankNowClearsKeysAndForgetsState(t *testing.T) {
 	dev := newFakeDevice(2)
 	b := newBridge(dev, "http://unused", "")
 	img := keyImage(t, color.RGBA{R: 1, A: 255})
 
 	_ = b.apply(stateWith(img))
-	b.disconnected()
+	b.blankNow()
 
 	if _, _, all := dev.snapshot(); all != 1 {
 		t.Errorf("ClearAllKeys called %d times, want 1", all)
@@ -286,6 +301,7 @@ func TestKeyEventsBecomeShortAndLongPresses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go b.handleKeys(ctx)
+	go b.sendPresses(ctx)
 
 	// A quick tap on key 3.
 	dev.events <- sdeck.Event{Key: 3, Type: sdeck.EventTypeDown}
@@ -328,6 +344,7 @@ func TestPressesAreDroppedWhileDisconnected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go b.handleKeys(ctx)
+	go b.sendPresses(ctx)
 
 	dev.events <- sdeck.Event{Key: 1, Type: sdeck.EventTypeDown}
 	dev.events <- sdeck.Event{Key: 1, Type: sdeck.EventTypeUp}
@@ -345,7 +362,7 @@ func sseServer(t *testing.T, writeEvents func(w http.ResponseWriter, f http.Flus
 		switch r.URL.Path {
 		case "/api/ui/state":
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"currentScreen":{"name":"home"},"grid":{"rows":3,"columns":5},"keys":[null]}`)
+			fmt.Fprint(w, stateJSON("home", nil))
 		case "/api/ui/events":
 			w.Header().Set("Content-Type", "text/event-stream")
 			f := w.(http.Flusher)
@@ -357,9 +374,9 @@ func sseServer(t *testing.T, writeEvents func(w http.ResponseWriter, f http.Flus
 func TestStreamStatesParsesEventsAndSkipsHeartbeats(t *testing.T) {
 	srv := sseServer(t, func(w http.ResponseWriter, f http.Flusher, r *http.Request) {
 		fmt.Fprint(w, ": heartbeat\n\n")
-		fmt.Fprint(w, `data: {"currentScreen":{"name":"media"},"grid":{"rows":3,"columns":5},"keys":["data:image/png;base64,AAAA",null]}`+"\n\n")
+		fmt.Fprint(w, "data: "+stateJSON("media", nil)+"\n\n")
 		fmt.Fprint(w, ": heartbeat\n\n")
-		fmt.Fprint(w, `data: {"currentScreen":{"name":"home"},"grid":{"rows":3,"columns":5},"keys":[]}`+"\n\n")
+		fmt.Fprint(w, "data: "+stateJSON("home", nil)+"\n\n")
 		f.Flush()
 	})
 	defer srv.Close()
@@ -405,7 +422,7 @@ func TestRunReconnectsAfterTheDaemonComesBack(t *testing.T) {
 				http.Error(w, "starting", http.StatusServiceUnavailable)
 				return
 			}
-			fmt.Fprintf(w, `{"currentScreen":{"name":"home"},"grid":{"rows":3,"columns":5},"keys":["%s"]}`, *img)
+			fmt.Fprint(w, stateJSON("home", img))
 			return
 		}
 
@@ -454,7 +471,7 @@ func TestRunReturnsDeviceErrors(t *testing.T) {
 	img := keyImage(t, color.RGBA{R: 2, A: 255})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/ui/state" {
-			fmt.Fprintf(w, `{"keys":["%s"]}`, *img)
+			fmt.Fprint(w, stateJSON("home", img))
 			return
 		}
 		<-r.Context().Done()
@@ -513,7 +530,7 @@ func TestAgainstLiveDaemon(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	state, err := fetchState(ctx, http.DefaultClient, server)
+	state, err := fetchState(ctx, http.DefaultClient, server, 5*time.Second)
 	if err != nil {
 		t.Fatalf("fetchState: %s", err)
 	}
@@ -543,5 +560,234 @@ func TestAgainstLiveDaemon(t *testing.T) {
 	err = streamStates(streamCtx, http.DefaultClient, server, time.Minute, func(uiState) {})
 	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Errorf("streamStates ended with %v, want it to stay open until the deadline", err)
+	}
+}
+
+func TestStreamStatesHandlesCRLFAndIgnoresNamedEvents(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, f http.Flusher, r *http.Request) {
+		// A proxy that rewrites line endings, and an event of some other type in the middle.
+		fmt.Fprint(w, "data: "+stateJSON("one", nil)+"\r\n\r\n")
+		fmt.Fprint(w, "event: debug\r\ndata: "+stateJSON("ignored", nil)+"\r\n\r\n")
+		fmt.Fprint(w, "event: message\r\ndata: "+stateJSON("two", nil)+"\r\n\r\n")
+		f.Flush()
+	})
+	defer srv.Close()
+
+	var screens []string
+	_ = streamStates(context.Background(), srv.Client(), srv.URL, time.Minute, func(s uiState) {
+		screens = append(screens, s.CurrentScreen.Name)
+	})
+
+	if strings.Join(screens, ",") != "one,two" {
+		t.Errorf("states = %v, want [one two]", screens)
+	}
+}
+
+func TestStateValidation(t *testing.T) {
+	good := stateWith(nil)
+	if err := good.validate(); err != nil {
+		t.Errorf("valid state rejected: %s", err)
+	}
+
+	var empty uiState
+	if err := empty.validate(); err == nil {
+		t.Errorf("empty state accepted; it would blank the whole deck")
+	}
+
+	short := stateWith(nil)
+	short.Keys = short.Keys[:7]
+	if err := short.validate(); err == nil {
+		t.Errorf("state with 7 keys for a 3x5 grid accepted")
+	}
+}
+
+func TestFetchStateRejectsAnEmptyOKResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	if _, err := fetchState(context.Background(), srv.Client(), srv.URL, time.Second); err == nil {
+		t.Errorf("fetchState accepted {}")
+	}
+}
+
+func TestFetchStateTimesOutOnAnUnresponsiveDaemon(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	_, err := fetchState(context.Background(), srv.Client(), srv.URL, 150*time.Millisecond)
+
+	if err == nil {
+		t.Fatalf("fetchState succeeded against a daemon that never answers")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("took %s to give up, want about the timeout", elapsed)
+	}
+}
+
+func TestStreamStatesGivesUpWhenHeadersNeverArrive(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // accepts the request, never responds
+	}))
+	defer srv.Close()
+
+	start := time.Now()
+	err := streamStates(context.Background(), srv.Client(), srv.URL, 150*time.Millisecond, func(uiState) {})
+
+	if err == nil {
+		t.Fatalf("streamStates returned nil")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("took %s to give up on a daemon that never answered, want about the idle timeout", elapsed)
+	}
+}
+
+func TestSlowDaemonDoesNotTurnTapsIntoLongPresses(t *testing.T) {
+	got := make(chan pressRecord, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Type string }
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		got <- pressRecord{path: r.URL.Path, kind: body.Type}
+		time.Sleep(400 * time.Millisecond) // a slow daemon
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	dev := newFakeDevice(15)
+	b := newBridge(dev, srv.URL, "tok")
+	b.client = srv.Client()
+	b.longPress = 150 * time.Millisecond
+	b.requestTimeout = 3 * time.Second
+	b.setConnected(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go b.handleKeys(ctx)
+	go b.sendPresses(ctx)
+
+	// Two quick taps back to back. While the daemon is still working on the first, the second must still be read
+	// from the device promptly and measured as short.
+	for _, key := range []int{1, 2} {
+		dev.events <- sdeck.Event{Key: key, Type: sdeck.EventTypeDown}
+		time.Sleep(20 * time.Millisecond)
+		dev.events <- sdeck.Event{Key: key, Type: sdeck.EventTypeUp}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	for i := 0; i < 2; i++ {
+		select {
+		case r := <-got:
+			if r.kind != "short" {
+				t.Errorf("press %d (%s) was %q, want short", i, r.path, r.kind)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("only %d presses arrived", i)
+		}
+	}
+}
+
+func TestRunReturnsAnErrorWhenTheDeviceGoesAway(t *testing.T) {
+	srv := sseServer(t, func(w http.ResponseWriter, f http.Flusher, r *http.Request) {
+		f.Flush()
+		<-r.Context().Done()
+	})
+	defer srv.Close()
+
+	dev := newFakeDevice(15)
+	b := newBridge(dev, srv.URL, "")
+	b.client = srv.Client()
+
+	done := make(chan error, 1)
+	go func() { done <- b.Run(context.Background()) }()
+
+	time.Sleep(100 * time.Millisecond)
+	close(dev.events) // what happens when the Stream Deck is unplugged
+
+	select {
+	case err := <-done:
+		var devErr *deviceError
+		if !errors.As(err, &devErr) {
+			t.Errorf("Run error = %v, want a deviceError so systemd restarts it", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run kept going with the device gone")
+	}
+}
+
+func TestBackoffIsNotResetBySessionsThatDieImmediately(t *testing.T) {
+	img := keyImage(t, color.RGBA{R: 5, A: 255})
+	var attempts int32
+
+	// The daemon serves state but drops the event stream straight away, every time.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/ui/state" {
+			atomic.AddInt32(&attempts, 1)
+			fmt.Fprint(w, stateJSON("home", img))
+			return
+		}
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	dev := newFakeDevice(15)
+	b := newBridge(dev, srv.URL, "")
+	b.client = srv.Client()
+	b.minBackoff, b.maxBackoff = 20*time.Millisecond, 160*time.Millisecond
+	b.stableAfter = time.Hour
+
+	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	defer cancel()
+	_ = b.Run(ctx)
+
+	// Backing off 20,40,80,160,160... allows about 7 attempts in 700ms; resetting every time would allow ~35.
+	if n := atomic.LoadInt32(&attempts); n > 12 {
+		t.Errorf("%d connection attempts in 700ms, want the backoff to slow them down", n)
+	}
+}
+
+func TestKeysStayVisibleThroughABriefDisconnect(t *testing.T) {
+	dev := newFakeDevice(15)
+	b := newBridge(dev, "http://unused", "")
+	b.blankAfter = 150 * time.Millisecond
+	img := keyImage(t, color.RGBA{R: 7, A: 255})
+
+	_ = b.apply(stateWith(img))
+	b.setConnected(true)
+
+	// A blip: lost, then back before the grace period ends. Nothing should be cleared.
+	b.lost()
+	time.Sleep(50 * time.Millisecond)
+	b.setConnected(true)
+	time.Sleep(250 * time.Millisecond)
+	if _, _, all := dev.snapshot(); all != 0 {
+		t.Errorf("keys were blanked during a brief disconnect (%d clears)", all)
+	}
+
+	// A real outage: lost and not back, so the keys blank once the grace period has passed.
+	b.lost()
+	time.Sleep(300 * time.Millisecond)
+	if _, _, all := dev.snapshot(); all != 1 {
+		t.Errorf("keys were not blanked after the daemon stayed away (%d clears)", all)
+	}
+}
+
+func TestCleartextRemote(t *testing.T) {
+	tests := map[string]bool{
+		"http://h033:1338":         true,
+		"http://192.168.1.20:1338": true,
+		"http://localhost:1338":    false,
+		"http://127.0.0.1:1338":    false,
+		"http://[::1]:1338":        false,
+		"https://deskpad.example":  false,
+	}
+
+	for server, want := range tests {
+		if got := cleartextRemote(server); got != want {
+			t.Errorf("cleartextRemote(%q) = %t, want %t", server, got, want)
+		}
 	}
 }
