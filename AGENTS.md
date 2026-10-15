@@ -23,6 +23,7 @@ The daemon in `cmd/deskpadd` wires control surfaces to optional integrations:
 - `surface_streamdeck.go`: Stream Deck surface implementation.
 - `surface_web.go`: Web surface — stores rendered snapshot and broadcasts updates to SSE subscribers.
 - `cmd/deskpadd`: Main daemon, config loading, integration setup, Spotify auth, and HTTP server.
+- `cmd/deskpad-surface`: Remote Stream Deck client. Runs on the machine the Stream Deck is plugged into and follows a daemon's `/api/ui/` API (state and SSE events in, key presses out). It must not import daemon code; the wire format is the contract, and `TestAgainstLiveDaemon` checks it against a real daemon when `DESKPAD_SMOKE_SERVER` is set.
 - `cmd/deskpadd/api.go`: HTTP handlers — web UI assets, `/status`, and the `/api/ui/` surface API.
 - `cmd/deskpadd/web/`: Embedded web UI (HTML, PWA manifest, service worker, icons).
 - `ui`: Shared UI domain types, such as media items and audio outputs.
