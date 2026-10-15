@@ -1,0 +1,12 @@
+# Copy to ~/.config/spotifyd/spotifyd.conf and set cache_path to an absolute path in your home directory
+# (spotifyd does not expand ~). The OAuth credentials are stored under <cache_path>/oauth/credentials.json.
+[global]
+backend = "pulseaudio"
+# deskpad's playback.connect-device must match this name. Avoid spaces.
+device_name = "deskpad"
+device_type = "speaker"
+cache_path = "/home/CHANGEME/.cache/spotifyd"
+# deskpad is the control plane: no LAN discovery, so other Spotify clients cannot take the session over.
+disable_discovery = true
+# Required: deskpad reads state and sends transport commands over MPRIS.
+use_mpris = true

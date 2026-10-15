@@ -1,0 +1,15 @@
+[Unit]
+Description=spotifyd Spotify Connect receiver (controlled by deskpad)
+# Order after the audio server where there is one (a user manager has no network-online.target; Restart= covers the
+# network not being up yet). The unit names that don't exist on a given host are ignored.
+After=pulseaudio.service pipewire-pulse.service
+
+[Service]
+# A systemd --user unit: spotifyd needs the user's PulseAudio socket and session D-Bus (MPRIS).
+# Enable linger so it starts at boot without a login: sudo loginctl enable-linger "$USER"
+ExecStart=/usr/bin/spotifyd --no-daemon --config-path %h/.config/spotifyd/spotifyd.conf
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

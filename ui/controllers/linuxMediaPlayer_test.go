@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus"
+	"github.com/zmb3/spotify/v2"
 )
 
 func TestMetadataStringHandlesMissingAndWrongTypeValues(t *testing.T) {
@@ -45,5 +46,99 @@ func TestMetadataStringsHandlesCommonMPRISArtistShapes(t *testing.T) {
 	}
 	if got := metadataStrings(metadata, "wrongType"); got != nil {
 		t.Fatalf("wrong type artists = %v, want nil", got)
+	}
+}
+
+func TestChoosePlayer(t *testing.T) {
+	tests := []struct {
+		name    string
+		names   []string
+		current string
+		want    string
+	}{
+		{"nothing on the bus", nil, "", ""},
+		{"current has gone and nothing else", nil, "a", ""},
+		{"first player found", []string{"a", "b"}, "", "a"},
+		{"keeps current while present", []string{"a", "b"}, "b", "b"},
+		{"replaces a vanished current", []string{"b"}, "a", "b"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := choosePlayer(tt.names, tt.current); got != tt.want {
+				t.Errorf("choosePlayer(%v, %q) = %q, want %q", tt.names, tt.current, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterMPRISNames(t *testing.T) {
+	names := []string{
+		"org.mpris.MediaPlayer2.ncspot.instance1",
+		"org.mpris.MediaPlayer2.spotifyd.instance2",
+		"org.mpris.MediaPlayer2.firefox.instance3",
+	}
+
+	if got := filterMPRISNames(names, ""); len(got) != 3 {
+		t.Errorf("empty prefix returned %v, want all names", got)
+	}
+
+	got := filterMPRISNames(names, "org.mpris.MediaPlayer2.spotifyd")
+	if len(got) != 1 || got[0] != "org.mpris.MediaPlayer2.spotifyd.instance2" {
+		t.Errorf("spotifyd prefix returned %v", got)
+	}
+
+	if got := filterMPRISNames(names, "org.mpris.MediaPlayer2.vlc"); len(got) != 0 {
+		t.Errorf("non-matching prefix returned %v, want none", got)
+	}
+}
+
+func TestFindConnectDeviceSkipsUntargetableAndPrefersActive(t *testing.T) {
+	devices := []spotify.PlayerDevice{
+		{ID: "", Name: "deskpad"},
+		{ID: "stale-id", Name: "deskpad"},
+		{ID: "live-id", Name: "DeskPad", Active: true},
+	}
+	if id, ok := findConnectDevice(devices, "deskpad"); !ok || id != "live-id" {
+		t.Errorf("findConnectDevice = (%q, %t), want the active device live-id", id, ok)
+	}
+
+	if _, ok := findConnectDevice([]spotify.PlayerDevice{{ID: "", Name: "deskpad"}}, "deskpad"); ok {
+		t.Errorf("findConnectDevice used a device with no ID")
+	}
+}
+
+func TestPlayOptionsFor(t *testing.T) {
+	playlist := playOptionsFor("dev", "spotify:playlist:abc")
+	if playlist.PlaybackContext == nil || string(*playlist.PlaybackContext) != "spotify:playlist:abc" || len(playlist.URIs) != 0 {
+		t.Errorf("playlist options = %+v, want a context play", playlist)
+	}
+	if playlist.PlaybackOffset == nil || playlist.PlaybackOffset.Position == nil || *playlist.PlaybackOffset.Position != 0 {
+		t.Errorf("playlist options should start at the first item, got offset %+v", playlist.PlaybackOffset)
+	}
+	if playlist.DeviceID == nil || *playlist.DeviceID != "dev" {
+		t.Errorf("playlist options device = %v, want dev", playlist.DeviceID)
+	}
+
+	track := playOptionsFor("dev", "spotify:track:xyz")
+	if track.PlaybackContext != nil || len(track.URIs) != 1 || track.URIs[0] != "spotify:track:xyz" {
+		t.Errorf("track options = %+v, want a direct uris play", track)
+	}
+}
+
+func TestFindConnectDevice(t *testing.T) {
+	devices := []spotify.PlayerDevice{
+		{ID: "mac-id", Name: "Robert’s MacBook Pro"},
+		{ID: "deskpad-id", Name: "deskpad"},
+	}
+
+	if id, ok := findConnectDevice(devices, "DeskPad"); !ok || id != "deskpad-id" {
+		t.Errorf("findConnectDevice(DeskPad) = (%q, %t), want (deskpad-id, true)", id, ok)
+	}
+	if _, ok := findConnectDevice(devices, "kitchen"); ok {
+		t.Errorf("findConnectDevice(kitchen) found a device, want none")
+	}
+	if _, ok := findConnectDevice(nil, "deskpad"); ok {
+		t.Errorf("findConnectDevice on no devices found a device")
 	}
 }

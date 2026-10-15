@@ -92,3 +92,8 @@ SERVICE_DEPLOY_HOST=your.host build-and-deploy-service --user deskpadd
 This only updates the binary on an already-installed service (via
 `install.sh`, above) — it doesn't create the config, the systemd user unit,
 or enable linger.
+
+## spotifyd (local playback control)
+
+With `playback.control: local`, deskpadd launches playlists on a Spotify Connect device and controls it over MPRIS.
+Building, installing and running that receiver is covered in [spotifyd/README.md](spotifyd/README.md).

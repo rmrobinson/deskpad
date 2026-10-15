@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/deskpad/ui/controllers"
 	"github.com/rmrobinson/deskpad/ui/screens"
-	"github.com/rmrobinson/go-mpris"
 	"github.com/rmrobinson/timebox"
 	tbbt "github.com/rmrobinson/timebox/bluetooth"
 	weatherv1 "github.com/rmrobinson/weather-server/proto/weather/v1"
@@ -118,42 +118,33 @@ func main() {
 	// it will also be used to control media playback.
 	spotifyClient := configureSpotifyClient(ctx, "token.json")
 
+	playback, err := loadPlaybackSettings(viper.GetViper())
+	if err != nil {
+		log.Fatalf("invalid playback configuration: %s\n", err.Error())
+	}
+	if len(playback.Ignored) > 0 {
+		log.Printf("*** %s ignored: they only apply when playback.control is %q\n", strings.Join(playback.Ignored, " and "), playbackControlLocal)
+	}
+	if playback.Legacy {
+		log.Printf("*** use-mpris is deprecated; set 'playback.control: %s' instead\n", playback.Control)
+	}
+
 	var mprisConn *dbus.Conn
-	var mprisInstanceName string
 	var pulseAudioClient *pulseaudio.Client
-	// Setup MPRIS & PulseAudio, if configured
-	if viper.GetBool("use-mpris") {
+	if playback.Control == playbackControlLocal {
 		conn, err := dbus.SessionBus()
 		if err != nil {
-			panic(err)
+			log.Fatalf("unable to connect to the D-Bus session bus (required for local playback control): %s\n", err.Error())
 		}
+		defer conn.Close()
 		mprisConn = conn
 
-		names, err := mpris.List(conn)
+		paClient, err := pulseaudio.NewClient()
 		if err != nil {
-			panic(err)
+			log.Fatalf("unable to connect to pulseaudio (required for local playback control): %s\n", err.Error())
 		}
-		if len(names) == 0 {
-			log.Printf("*** No MPRIS media player found; falling back to Spotify playback control\n")
-			conn.Close()
-			mprisConn = nil
-		} else {
-			mprisInstanceName = names[0]
-			log.Printf("*** MPRIS media player at '%s'\n", mprisInstanceName)
-
-			paClient, err := pulseaudio.NewClient()
-			if err != nil {
-				log.Printf("error connecting to pulseaudio; falling back to Spotify playback control: %s\n", err.Error())
-				conn.Close()
-				mprisConn = nil
-			} else {
-				defer conn.Close()
-				defer paClient.Close()
-				pulseAudioClient = paClient
-			}
-		}
-	} else {
-		log.Printf("*** MPRIS disabled\n")
+		defer paClient.Close()
+		pulseAudioClient = paClient
 	}
 
 	// Setup weather, if configured
@@ -283,12 +274,22 @@ func main() {
 	var apiMPC MediaPlayerController
 	var playlistPlaybackController controllers.PlaylistPlaybackController
 
-	if mprisConn != nil && pulseAudioClient != nil {
-		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, mprisInstanceName, pulseAudioClient)
+	if playback.Control == playbackControlLocal {
+		var opts []controllers.LinuxMediaPlayerOption
+		if playback.MPRISPrefix != "" {
+			opts = append(opts, controllers.WithMPRISNamePrefix(playback.MPRISPrefix))
+		}
+		if playback.ConnectDevice != "" {
+			opts = append(opts, controllers.WithSpotifyConnect(controllers.NewSpotifyConnect(spotifyClient), playback.ConnectDevice))
+		}
+		log.Printf("*** Playback: local control (MPRIS + PulseAudio), Spotify Connect device %q, MPRIS prefix %q\n", playback.ConnectDevice, playback.MPRISPrefix)
+
+		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, pulseAudioClient, opts...)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
 		apiMPC = linuxMpc
 		playlistPlaybackController = linuxMpc
 	} else {
+		log.Printf("*** Playback: Spotify control\n")
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
 		mps = screens.NewMediaPlayer(hs, spotifyMpc)
 		apiMPC = spotifyMpc
