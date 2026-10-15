@@ -1,4 +1,11 @@
-use-mpris: true
+playback:
+  # spotify: control everything through the Spotify Web API (any OS).
+  # local:   Spotify launches media; MPRIS + PulseAudio control it (Linux).
+  control: local
+  # local only: launch playlists on this Spotify Connect device (e.g. a spotifyd receiver).
+  connect-device: deskpad
+  # local only: only control MPRIS players whose D-Bus name starts with this.
+  mpris-prefix: org.mpris.MediaPlayer2.spotifyd
 use-streamdeck: true
 web:
   addr: :1337

@@ -112,7 +112,12 @@ Use `cmd/deskpadd/example_config.yaml` as the schema reference. Feature blocks a
 
 Notable config keys:
 - `use-streamdeck`: bool — attach to a physical Stream Deck.
-- `use-mpris`: bool — use Linux MPRIS/PulseAudio instead of Spotify for playback.
+- `playback.control`: `spotify` or `local` (default `spotify`). Spotify is involved either way; this chooses how much of the control it does.
+  - `spotify`: everything goes through the Spotify Web API (`SpotifyMediaPlayer`). Needs no local player and works on any OS, but controls whichever device Spotify considers active.
+  - `local`: Spotify only launches media. Transport, state and volume are local, over MPRIS and PulseAudio (`LinuxMediaPlayer`). Linux only; needs the D-Bus session bus and PulseAudio at startup, but the MPRIS player itself may appear later.
+- `playback.connect-device`: string — `local` only. Spotify Connect device name (e.g. `deskpad`). When set, playlists are launched on it through deskpad's own Spotify app instead of asking the MPRIS player to open the URI. A failure is returned, never retried through `OpenUri`. A Connect receiver such as spotifyd only exposes MPRIS once it is the active device, so launching has to come from Spotify.
+- `playback.mpris-prefix`: string — `local` only. Only control MPRIS players whose D-Bus name starts with this (e.g. `org.mpris.MediaPlayer2.spotifyd`). Unset means any player on the session bus.
+- `use-mpris`: deprecated. Honoured only when `playback.control` is unset: `true` is `local`, `false` is `spotify`.
 - `web.addr`: string — HTTP listen address (default `:1337`).
 - `web.auth-token`: string — bearer token required for `POST /api/ui/keys/{id}/press`; if empty, key presses from the web are disabled.
 - `weather.addr`, `weather.use-tls`, `weather.ca-cert`: weather-server gRPC config.
@@ -142,6 +147,6 @@ Hardware-dependent behavior may require a connected Stream Deck, Bluetooth adapt
 ## Development Notes
 
 - `TODO.md` tracks planned work including Stream Deck dimension support, Timebox, playlist, playback, and known bugs.
-- Be careful with nil optional integrations. Some startup paths intentionally use Spotify when MPRIS/PulseAudio are disabled.
+- Be careful with nil optional integrations. Spotify playback control is used only when `playback.control` is `spotify`; there is no automatic fallback between the two modes.
 - When adding API surface, keep response types JSON-tagged and avoid leaking internal controller types directly.
 - When touching Spotify auth, preserve OAuth state validation and keep token file permissions restrictive.
