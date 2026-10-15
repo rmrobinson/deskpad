@@ -88,6 +88,12 @@ to start if the D-Bus session bus or PulseAudio isn't reachable, rather than qui
 `use-mpris` key still works when `playback.control` is unset (`true` is `local`, `false` is `spotify`) and logs a
 deprecation notice.
 
+## Deploying deskpadd
+
+Linux deployment files live in [deploy/](deploy/README.md): installing `deskpadd` as a systemd `--user` service on the
+machine with the Stream Deck plugged in. It has to be built on that machine, because the Stream Deck's HID library
+needs the target's `libudev` headers and doesn't cross-compile cleanly; `deploy/install.sh --build` does it in place.
+
 ## Setting up spotifyd
 
 `local` control needs a Spotify Connect receiver on the machine. [deploy/spotifyd](deploy/spotifyd/README.md) has the
@@ -101,5 +107,4 @@ go test ./...
 ```
 
 The D-Bus integration tests in `ui/controllers` run fake MPRIS players on a real session bus and skip themselves
-when none is available. The Stream Deck support needs `libudev` headers, so build on the machine that has the
-device attached (cross-compiling it is not supported).
+when none is available.

@@ -1,0 +1,31 @@
+[Unit]
+Description=DeskPad Stream Deck controller
+Documentation=https://github.com/rmrobinson/deskpad
+After=graphical-session.target
+# Avoids a tight restart loop burning CPU/log space if a dependency this
+# needs (e.g. a configured Timebox's Bluetooth address) is unreachable at
+# startup — main.go currently log.Fatal()s on that instead of retrying inline.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.deskpad
+# zmb3/spotify/v2/auth reads SPOTIFY_ID/SPOTIFY_SECRET from the environment
+# itself (needed for OAuth token refresh, not just initial login) — kept out
+# of this tracked unit file via a gitignored env file instead. Leading '-'
+# means a missing file doesn't block startup.
+EnvironmentFile=-%h/.deskpad/deskpad.env
+ExecStart=%h/.local/bin/deskpadd
+Restart=on-failure
+RestartSec=5s
+
+# This is a systemd --user unit, not a system one: deskpadd needs the
+# logged-in user's session D-Bus (MPRIS), PulseAudio socket, and raw USB HID
+# access to the physical Stream Deck, none of which a dedicated system
+# account has without extra wiring. Enable linger (see deploy/README.md) so
+# it still starts on boot without an interactive login.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
