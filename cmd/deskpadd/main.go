@@ -27,6 +27,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// houseRoomConfig is one entry of the house.rooms config list: the room to
+// display and (optionally) the label to show for it, since the house
+// service's Room.Config.name isn't fetched until the controller connects.
+type houseRoomConfig struct {
+	RoomID string `mapstructure:"room-id"`
+	Label  string `mapstructure:"label"`
+}
+
 func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.Client {
 	tokenFile, err := os.ReadFile(tokenFilePath)
 	var token *oauth2.Token
@@ -335,6 +343,49 @@ func main() {
 	bs := controllers.NewBluetoothSetting(btAdapter, btAdapterID)
 	bs.RefreshDevices(ctx)
 	_ = screens.NewBluetoothSetting(hs, bs)
+
+	// Set up house device control, if configured. Each configured room gets
+	// its own device-list/device-control screen pair and its own connection,
+	// kept open only while one of those two screens is active (see
+	// controllers.House.Start/Stop).
+	if viper.IsSet("house.addr") {
+		var houseRooms []houseRoomConfig
+		if err := viper.UnmarshalKey("house.rooms", &houseRooms); err != nil {
+			log.Printf("unable to retrieve house rooms: %s\n", err.Error())
+		}
+
+		for _, room := range houseRooms {
+			if room.RoomID == "" {
+				continue
+			}
+
+			hc, err := controllers.NewHouse(
+				ctx,
+				viper.GetString("house.addr"),
+				viper.GetBool("house.use-tls"),
+				viper.GetString("house.ca-cert"),
+				viper.GetString("house.cert-file"),
+				viper.GetString("house.key-file"),
+				viper.GetString("house.server-name"),
+				room.RoomID,
+			)
+			if err != nil {
+				log.Printf("unable to set up house room %s: %s\n", room.RoomID, err.Error())
+				continue
+			}
+
+			label := room.Label
+			if label == "" {
+				label = room.RoomID
+			}
+
+			hdl := screens.NewHouseDeviceList(hs, label, hc)
+			hdc := screens.NewHouseDeviceControl(hdl, hc)
+			hdl.SetControlScreen(hdc)
+		}
+	} else {
+		log.Printf("no house address provided, will not display house device screens\n")
+	}
 
 	d := deskpad.NewDeck(hs)
 	var streamDeckSurface *deskpad.StreamDeckSurface

@@ -122,6 +122,10 @@ Notable config keys:
 - `weather.addr`, `weather.use-tls`, `weather.ca-cert`: weather-server gRPC config.
 - `timebox.addr`, `timebox.channel`, `timebox.color.*`: Timebox Bluetooth config.
 - `bluetooth.adapter-id`: BlueZ adapter name (e.g. `hci0`).
+- `house.addr`: string — the house bridge/aggregator to dial for the house device control screens (`ui/controllers/house.go`). Unset skips that feature entirely.
+- `house.rooms`: list of `{room-id, label}` — one device-list/device-control screen pair per entry; `label` falls back to `room-id` if omitted.
+- `house.use-tls`, `house.ca-cert`, `house.cert-file`, `house.key-file`: mutual TLS for the `house.addr` connection. house's own bridges/`housed` are issued certs by a private step-ca instance (see the `house-config` repo's `docker-compose/README.md` "Mutual TLS" section) — `ca-cert` is that CA's root, `cert-file`/`key-file` are DeskPad's own client identity from the same provisioner.
+- `house.server-name`: string — overrides the hostname the server certificate is verified against. **Required** whenever `house.addr` isn't itself that name, which is the common case here: step-ca issues certs for `<name>.<host>.house.internal` (e.g. `housed.yourhost.house.internal`), essentially never the real address (`yourhost.example.com:<port>`, an IP, etc.) actually dialed. Leaving this unset when it's needed fails TLS verification, not just a config nicety.
 
 Sensitive or machine-local config and OAuth token files are ignored by git. Do not add real tokens, device addresses, or personal config values to tracked files.
 

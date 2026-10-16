@@ -27,3 +27,16 @@ media-playlists:
     name: Example playlist 1
   - id: playlist:uri:456
     name: Example playlist 2
+house:
+  addr: yourhost.example.com:1337
+  use-tls: true
+  ca-cert: /etc/house/tls/ca.crt
+  cert-file: /etc/house/tls/tls.crt
+  key-file: /etc/house/tls/tls.key
+  # Required whenever addr isn't itself the name the server's certificate
+  # was issued for - e.g. house's step-ca-issued bridge certs are for
+  # "<name>.<host>.house.internal", not the address actually dialed.
+  server-name: housed.yourhost.house.internal
+  rooms:
+    - room-id: 11111111-1111-1111-1111-111111111111
+      label: Living Room

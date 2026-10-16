@@ -77,6 +77,7 @@ func (hs *Home) RegisterScreen(s deskpad.Screen) {
 			return
 		}
 	}
+	log.Printf("home: no free slot to register screen %q; it will not be reachable from home\n", s.Name())
 }
 
 // KeyPressed handles the logic of what to do when a given key is pressed.
