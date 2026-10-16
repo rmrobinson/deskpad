@@ -11,6 +11,7 @@ require (
 	github.com/lawl/pulseaudio v0.0.0-20220626105240-976bed5e247c
 	github.com/muka/go-bluetooth v0.0.0-20240701044517-04c4f09c514e
 	github.com/rmrobinson/go-mpris v0.0.1
+	github.com/rmrobinson/house v0.0.0-20261003024013-7d0693637efe
 	github.com/rmrobinson/timebox v0.0.0-20251230134523-2105608e9a96
 	github.com/rmrobinson/weather-server v0.0.0-20260613201254-86bb87cdfd2e
 	github.com/spf13/viper v1.19.0
@@ -19,6 +20,13 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/grpc v1.81.1
 )
+
+// github.com/rmrobinson/house builds its api/* packages' Go code via Bazel
+// rather than committing it, so plain `go build` can't fetch it from the
+// module proxy. ./housepb vendors the generated code for the packages
+// deskpad needs (api, api/command, api/device, api/trait); regenerate it
+// with scripts/gen-housepb.sh when the upstream .proto files change.
+replace github.com/rmrobinson/house => ./housepb
 
 require (
 	github.com/disintegration/imaging v1.6.2 // indirect
@@ -41,9 +49,9 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
