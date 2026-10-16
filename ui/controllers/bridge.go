@@ -37,6 +37,8 @@ type BridgeMediaPlayerController interface {
 	Pause()
 	FastForward()
 	Rewind()
+	Next() error
+	Previous() error
 	Mute()
 	Unmute()
 	IsPlaying() bool
@@ -260,6 +262,14 @@ func (b *Bridge) apply(ctx context.Context, cmd *command.Command) error {
 		}
 	case *command.Command_SeekAbsolute:
 		return status.Error(codes.Unimplemented, "absolute seek is not supported")
+	case *command.Command_SkipForward:
+		if err := b.media.Next(); err != nil {
+			return status.Errorf(codes.Unavailable, "skip forward: %s", err.Error())
+		}
+	case *command.Command_SkipBackward:
+		if err := b.media.Previous(); err != nil {
+			return status.Errorf(codes.Unavailable, "skip backward: %s", err.Error())
+		}
 	case *command.Command_VolumeAbsolute:
 		b.media.SetVolume(int(d.VolumeAbsolute.GetLevel()))
 	case *command.Command_VolumeRelative:
@@ -374,17 +384,13 @@ func (b *Bridge) mediaTrait() *apitrait.Media {
 	}
 
 	canTrue := true
-	// Not exposed: the local players only support fixed-step fast-forward
-	// and rewind (surfaced above as CanSeek), not an explicit skip-track
-	// command - there's no Command variant for it to attach to yet.
-	canFalse := false
 	return &apitrait.Media{
 		Attributes: &apitrait.Media_Attributes{
 			CanControl:      true,
 			CanPause:        &canTrue,
 			CanSeek:         &canTrue,
-			CanSkipForward:  &canFalse,
-			CanSkipBackward: &canFalse,
+			CanSkipForward:  &canTrue,
+			CanSkipBackward: &canTrue,
 		},
 		State: state,
 	}

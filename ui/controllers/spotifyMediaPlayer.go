@@ -84,16 +84,20 @@ func (mp *SpotifyMediaPlayer) Pause() {
 	mp.isPlaying = false
 }
 
-func (mp *SpotifyMediaPlayer) Next() {
+func (mp *SpotifyMediaPlayer) Next() error {
 	if err := mp.client.Next(mp.ctx); err != nil {
 		log.Printf("error going next: %s\n", err.Error())
+		return err
 	}
+	return nil
 }
 
-func (mp *SpotifyMediaPlayer) Previous() {
+func (mp *SpotifyMediaPlayer) Previous() error {
 	if err := mp.client.Previous(mp.ctx); err != nil {
 		log.Printf("error going previous: %s\n", err.Error())
+		return err
 	}
+	return nil
 }
 
 func (mp *SpotifyMediaPlayer) IsPlaying() bool {

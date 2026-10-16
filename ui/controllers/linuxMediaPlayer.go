@@ -108,24 +108,31 @@ func (m *LinuxMediaPlayer) Pause() {
 	m.command("Pause")
 }
 
-func (m *LinuxMediaPlayer) Next() {
-	m.command("Next")
+// Next skips to the next track. Unlike Play/Pause, the outcome is reported:
+// Bridge.apply surfaces it as the result of a SkipForward command, so a
+// caller can tell a skip that had no player to act on apart from one that
+// succeeded.
+func (m *LinuxMediaPlayer) Next() error {
+	return m.command("Next")
 }
 
-func (m *LinuxMediaPlayer) Previous() {
-	m.command("Previous")
+// Previous returns to the previous track. See Next's doc comment.
+func (m *LinuxMediaPlayer) Previous() error {
+	return m.command("Previous")
 }
 
-func (m *LinuxMediaPlayer) command(method string) {
+func (m *LinuxMediaPlayer) command(method string) error {
 	name, ok := m.currentPlayerName()
 	if !ok {
-		return
+		return errors.New("no MPRIS media player available")
 	}
 
 	log.Printf("mpris %s: %s\n", name, method)
 	if err := m.callPlayer(name, method); err != nil {
 		log.Printf("mpris %s: %s failed: %s\n", name, method, err.Error())
+		return fmt.Errorf("mpris %s: %w", method, err)
 	}
+	return nil
 }
 
 func (m *LinuxMediaPlayer) FastForward() {
