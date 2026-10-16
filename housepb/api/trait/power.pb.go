@@ -125,12 +125,20 @@ type Power_State struct {
 	CurrentA float64 `protobuf:"fixed64,1,opt,name=current_a,json=currentA,proto3" json:"current_a,omitempty"`
 	// Power being measured; reported in watts.
 	PowerW float64 `protobuf:"fixed64,2,opt,name=power_w,json=powerW,proto3" json:"power_w,omitempty"`
-	// Voltage being measured; reported in volts.
+	// Voltage being measured; reported in volts. This is the voltage on the
+	// device's input/supply side (e.g. a UPS's mains input, an EV charger's
+	// grid voltage), so a drop to 0 on a UPS means it has lost line power.
 	VoltageV float64 `protobuf:"fixed64,3,opt,name=voltage_v,json=voltageV,proto3" json:"voltage_v,omitempty"`
 	// Frequency of the line voltage, reported in Hz.
 	FrequencyHz *float64 `protobuf:"fixed64,4,opt,name=frequency_hz,json=frequencyHz,proto3,oneof" json:"frequency_hz,omitempty"`
 	// What is the current status of the power monitor?
-	Status        string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	Status string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	// Cumulative energy consumed by the device, reported in kilowatt-hours.
+	// Unlike the other fields this is a running total, not an instantaneous
+	// reading, and it can reset to a lower value if the device is re-paired or
+	// factory reset - consumers integrating it should tolerate decreases.
+	// Absent if the device doesn't meter energy.
+	EnergyKwh     *float64 `protobuf:"fixed64,6,opt,name=energy_kwh,json=energyKwh,proto3,oneof" json:"energy_kwh,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -200,11 +208,18 @@ func (x *Power_State) GetStatus() string {
 	return ""
 }
 
+func (x *Power_State) GetEnergyKwh() float64 {
+	if x != nil && x.EnergyKwh != nil {
+		return *x.EnergyKwh
+	}
+	return 0
+}
+
 var File_api_trait_power_proto protoreflect.FileDescriptor
 
 const file_api_trait_power_proto_rawDesc = "" +
 	"\n" +
-	"\x15api/trait/power.proto\x12\x17faltung.house.api.trait\"\xe6\x02\n" +
+	"\x15api/trait/power.proto\x12\x17faltung.house.api.trait\"\x99\x03\n" +
 	"\x05Power\x12I\n" +
 	"\n" +
 	"attributes\x18\x01 \x01(\v2).faltung.house.api.trait.Power.AttributesR\n" +
@@ -212,14 +227,17 @@ const file_api_trait_power_proto_rawDesc = "" +
 	"\x05state\x18\x02 \x01(\v2$.faltung.house.api.trait.Power.StateR\x05state\x1a(\n" +
 	"\n" +
 	"Attributes\x12\x1a\n" +
-	"\bstatuses\x18\x01 \x03(\tR\bstatuses\x1a\xab\x01\n" +
+	"\bstatuses\x18\x01 \x03(\tR\bstatuses\x1a\xde\x01\n" +
 	"\x05State\x12\x1b\n" +
 	"\tcurrent_a\x18\x01 \x01(\x01R\bcurrentA\x12\x17\n" +
 	"\apower_w\x18\x02 \x01(\x01R\x06powerW\x12\x1b\n" +
 	"\tvoltage_v\x18\x03 \x01(\x01R\bvoltageV\x12&\n" +
 	"\ffrequency_hz\x18\x04 \x01(\x01H\x00R\vfrequencyHz\x88\x01\x01\x12\x16\n" +
-	"\x06status\x18\x05 \x01(\tR\x06statusB\x0f\n" +
-	"\r_frequency_hzB'Z%github.com/rmrobinson/house/api/traitb\x06proto3"
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\"\n" +
+	"\n" +
+	"energy_kwh\x18\x06 \x01(\x01H\x01R\tenergyKwh\x88\x01\x01B\x0f\n" +
+	"\r_frequency_hzB\r\n" +
+	"\v_energy_kwhB'Z%github.com/rmrobinson/house/api/traitb\x06proto3"
 
 var (
 	file_api_trait_power_proto_rawDescOnce sync.Once

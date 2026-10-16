@@ -48,6 +48,7 @@ type Generic struct {
 	Thermostat    *trait.Thermostat      `protobuf:"bytes,14,opt,name=thermostat,proto3,oneof" json:"thermostat,omitempty"`
 	Time          *trait.Time            `protobuf:"bytes,15,opt,name=time,proto3,oneof" json:"time,omitempty"`
 	Volume        *trait.Volume          `protobuf:"bytes,16,opt,name=volume,proto3,oneof" json:"volume,omitempty"`
+	Buttons       *trait.Buttons         `protobuf:"bytes,17,opt,name=buttons,proto3,oneof" json:"buttons,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,11 +195,19 @@ func (x *Generic) GetVolume() *trait.Volume {
 	return nil
 }
 
+func (x *Generic) GetButtons() *trait.Buttons {
+	if x != nil {
+		return x.Buttons
+	}
+	return nil
+}
+
 var File_api_device_generic_proto protoreflect.FileDescriptor
 
 const file_api_device_generic_proto_rawDesc = "" +
 	"\n" +
-	"\x18api/device/generic.proto\x12\x18faltung.house.api.device\x1a\x1eapi/trait/air_properties.proto\x1a\x1bapi/trait/air_quality.proto\x1a\x13api/trait/app.proto\x1a\x1capi/trait/audio_output.proto\x1a\x17api/trait/battery.proto\x1a\x1aapi/trait/brightness.proto\x1a\x16api/trait/colour.proto\x1a\x15api/trait/input.proto\x1a\x1bapi/trait/light_level.proto\x1a\x15api/trait/media.proto\x1a\x15api/trait/onoff.proto\x1a\x15api/trait/power.proto\x1a\x15api/trait/speed.proto\x1a\x1aapi/trait/thermostat.proto\x1a\x14api/trait/time.proto\x1a\x16api/trait/volume.proto\"\xef\t\n" +
+	"\x18api/device/generic.proto\x12\x18faltung.house.api.device\x1a\x1eapi/trait/air_properties.proto\x1a\x1bapi/trait/air_quality.proto\x1a\x13api/trait/app.proto\x1a\x1capi/trait/audio_output.proto\x1a\x17api/trait/battery.proto\x1a\x1aapi/trait/brightness.proto\x1a\x16api/trait/button.proto\x1a\x16api/trait/colour.proto\x1a\x15api/trait/input.proto\x1a\x1bapi/trait/light_level.proto\x1a\x15api/trait/media.proto\x1a\x15api/trait/onoff.proto\x1a\x15api/trait/power.proto\x1a\x15api/trait/speed.proto\x1a\x1aapi/trait/thermostat.proto\x1a\x14api/trait/time.proto\x1a\x16api/trait/volume.proto\"\xbc\n" +
+	"\n" +
 	"\aGeneric\x12R\n" +
 	"\x0eair_properties\x18\x01 \x01(\v2&.faltung.house.api.trait.AirPropertiesH\x00R\rairProperties\x88\x01\x01\x12I\n" +
 	"\vair_quality\x18\x02 \x01(\v2#.faltung.house.api.trait.AirQualityH\x01R\n" +
@@ -223,7 +232,8 @@ const file_api_device_generic_proto_rawDesc = "" +
 	"thermostat\x18\x0e \x01(\v2#.faltung.house.api.trait.ThermostatH\rR\n" +
 	"thermostat\x88\x01\x01\x126\n" +
 	"\x04time\x18\x0f \x01(\v2\x1d.faltung.house.api.trait.TimeH\x0eR\x04time\x88\x01\x01\x12<\n" +
-	"\x06volume\x18\x10 \x01(\v2\x1f.faltung.house.api.trait.VolumeH\x0fR\x06volume\x88\x01\x01B\x11\n" +
+	"\x06volume\x18\x10 \x01(\v2\x1f.faltung.house.api.trait.VolumeH\x0fR\x06volume\x88\x01\x01\x12?\n" +
+	"\abuttons\x18\x11 \x01(\v2 .faltung.house.api.trait.ButtonsH\x10R\abuttons\x88\x01\x01B\x11\n" +
 	"\x0f_air_propertiesB\x0e\n" +
 	"\f_air_qualityB\x06\n" +
 	"\x04_appB\x0f\n" +
@@ -240,7 +250,9 @@ const file_api_device_generic_proto_rawDesc = "" +
 	"\x06_speedB\r\n" +
 	"\v_thermostatB\a\n" +
 	"\x05_timeB\t\n" +
-	"\a_volumeB(Z&github.com/rmrobinson/house/api/deviceb\x06proto3"
+	"\a_volumeB\n" +
+	"\n" +
+	"\b_buttonsB(Z&github.com/rmrobinson/house/api/deviceb\x06proto3"
 
 var (
 	file_api_device_generic_proto_rawDescOnce sync.Once
@@ -273,6 +285,7 @@ var file_api_device_generic_proto_goTypes = []any{
 	(*trait.Thermostat)(nil),    // 14: faltung.house.api.trait.Thermostat
 	(*trait.Time)(nil),          // 15: faltung.house.api.trait.Time
 	(*trait.Volume)(nil),        // 16: faltung.house.api.trait.Volume
+	(*trait.Buttons)(nil),       // 17: faltung.house.api.trait.Buttons
 }
 var file_api_device_generic_proto_depIdxs = []int32{
 	1,  // 0: faltung.house.api.device.Generic.air_properties:type_name -> faltung.house.api.trait.AirProperties
@@ -291,11 +304,12 @@ var file_api_device_generic_proto_depIdxs = []int32{
 	14, // 13: faltung.house.api.device.Generic.thermostat:type_name -> faltung.house.api.trait.Thermostat
 	15, // 14: faltung.house.api.device.Generic.time:type_name -> faltung.house.api.trait.Time
 	16, // 15: faltung.house.api.device.Generic.volume:type_name -> faltung.house.api.trait.Volume
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	17, // 16: faltung.house.api.device.Generic.buttons:type_name -> faltung.house.api.trait.Buttons
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_api_device_generic_proto_init() }

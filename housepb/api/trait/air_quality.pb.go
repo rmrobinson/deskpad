@@ -136,6 +136,9 @@ type AirQuality_State struct {
 	Co2Ppm *int32 `protobuf:"varint,6,opt,name=co2_ppm,json=co2Ppm,proto3,oneof" json:"co2_ppm,omitempty"`
 	// Radon measurement, in Becquerel per cubic metre (Bq/m3)
 	RadonBqM3 *int32 `protobuf:"varint,7,opt,name=radon_bq_m3,json=radonBqM3,proto3,oneof" json:"radon_bq_m3,omitempty"`
+	// Short-term average radon measurement, in Becquerel per cubic metre (Bq/m3).
+	// radon_bq_m3 is the long-term average where a device reports both.
+	RadonShortTermBqM3 *int32 `protobuf:"varint,9,opt,name=radon_short_term_bq_m3,json=radonShortTermBqM3,proto3,oneof" json:"radon_short_term_bq_m3,omitempty"`
 	// Whether carbon monoxide has been detected. Binary only.
 	CarbonMonoxideDetected *bool `protobuf:"varint,8,opt,name=carbon_monoxide_detected,json=carbonMonoxideDetected,proto3,oneof" json:"carbon_monoxide_detected,omitempty"`
 	unknownFields          protoimpl.UnknownFields
@@ -221,6 +224,13 @@ func (x *AirQuality_State) GetRadonBqM3() int32 {
 	return 0
 }
 
+func (x *AirQuality_State) GetRadonShortTermBqM3() int32 {
+	if x != nil && x.RadonShortTermBqM3 != nil {
+		return *x.RadonShortTermBqM3
+	}
+	return 0
+}
+
 func (x *AirQuality_State) GetCarbonMonoxideDetected() bool {
 	if x != nil && x.CarbonMonoxideDetected != nil {
 		return *x.CarbonMonoxideDetected
@@ -232,7 +242,7 @@ var File_api_trait_air_quality_proto protoreflect.FileDescriptor
 
 const file_api_trait_air_quality_proto_rawDesc = "" +
 	"\n" +
-	"\x1bapi/trait/air_quality.proto\x12\x17faltung.house.api.trait\"\x9d\x05\n" +
+	"\x1bapi/trait/air_quality.proto\x12\x17faltung.house.api.trait\"\xf1\x05\n" +
 	"\n" +
 	"AirQuality\x12N\n" +
 	"\n" +
@@ -241,7 +251,7 @@ const file_api_trait_air_quality_proto_rawDesc = "" +
 	"\x05state\x18\x02 \x01(\v2).faltung.house.api.trait.AirQuality.StateR\x05state\x1a1\n" +
 	"\n" +
 	"Attributes\x12#\n" +
-	"\rair_qualities\x18\x01 \x03(\tR\fairQualities\x1a\xca\x03\n" +
+	"\rair_qualities\x18\x01 \x03(\tR\fairQualities\x1a\x9e\x04\n" +
 	"\x05State\x12$\n" +
 	"\vair_quality\x18\x01 \x01(\tH\x00R\n" +
 	"airQuality\x88\x01\x01\x12H\n" +
@@ -250,8 +260,9 @@ const file_api_trait_air_quality_proto_rawDesc = "" +
 	"\x04pm10\x18\x04 \x01(\x05H\x03R\x04pm10\x88\x01\x01\x12\x15\n" +
 	"\x03aqi\x18\x05 \x01(\x05H\x04R\x03aqi\x88\x01\x01\x12\x1c\n" +
 	"\aco2_ppm\x18\x06 \x01(\x05H\x05R\x06co2Ppm\x88\x01\x01\x12#\n" +
-	"\vradon_bq_m3\x18\a \x01(\x05H\x06R\tradonBqM3\x88\x01\x01\x12=\n" +
-	"\x18carbon_monoxide_detected\x18\b \x01(\bH\aR\x16carbonMonoxideDetected\x88\x01\x01B\x0e\n" +
+	"\vradon_bq_m3\x18\a \x01(\x05H\x06R\tradonBqM3\x88\x01\x01\x127\n" +
+	"\x16radon_short_term_bq_m3\x18\t \x01(\x05H\aR\x12radonShortTermBqM3\x88\x01\x01\x12=\n" +
+	"\x18carbon_monoxide_detected\x18\b \x01(\bH\bR\x16carbonMonoxideDetected\x88\x01\x01B\x0e\n" +
 	"\f_air_qualityB!\n" +
 	"\x1f_volatile_organic_compounds_ppbB\b\n" +
 	"\x06_pm2_5B\a\n" +
@@ -259,7 +270,8 @@ const file_api_trait_air_quality_proto_rawDesc = "" +
 	"\x04_aqiB\n" +
 	"\n" +
 	"\b_co2_ppmB\x0e\n" +
-	"\f_radon_bq_m3B\x1b\n" +
+	"\f_radon_bq_m3B\x19\n" +
+	"\x17_radon_short_term_bq_m3B\x1b\n" +
 	"\x19_carbon_monoxide_detectedB'Z%github.com/rmrobinson/house/api/traitb\x06proto3"
 
 var (

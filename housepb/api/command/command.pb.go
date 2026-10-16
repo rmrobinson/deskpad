@@ -67,6 +67,10 @@ type Command struct {
 	//	*Command_SetComfortProfile
 	//	*Command_SetHumidity
 	//	*Command_Colour
+	//	*Command_SkipForward
+	//	*Command_SkipBackward
+	//	*Command_Input
+	//	*Command_AudioOutput
 	Details       isCommand_Details `protobuf_oneof:"details"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -373,6 +377,42 @@ func (x *Command) GetColour() *Colour {
 	return nil
 }
 
+func (x *Command) GetSkipForward() *SkipForward {
+	if x != nil {
+		if x, ok := x.Details.(*Command_SkipForward); ok {
+			return x.SkipForward
+		}
+	}
+	return nil
+}
+
+func (x *Command) GetSkipBackward() *SkipBackward {
+	if x != nil {
+		if x, ok := x.Details.(*Command_SkipBackward); ok {
+			return x.SkipBackward
+		}
+	}
+	return nil
+}
+
+func (x *Command) GetInput() *Input {
+	if x != nil {
+		if x, ok := x.Details.(*Command_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *Command) GetAudioOutput() *AudioOutput {
+	if x != nil {
+		if x, ok := x.Details.(*Command_AudioOutput); ok {
+			return x.AudioOutput
+		}
+	}
+	return nil
+}
+
 type isCommand_Details interface {
 	isCommand_Details()
 }
@@ -485,6 +525,22 @@ type Command_Colour struct {
 	Colour *Colour `protobuf:"bytes,126,opt,name=colour,proto3,oneof"`
 }
 
+type Command_SkipForward struct {
+	SkipForward *SkipForward `protobuf:"bytes,127,opt,name=skip_forward,json=skipForward,proto3,oneof"`
+}
+
+type Command_SkipBackward struct {
+	SkipBackward *SkipBackward `protobuf:"bytes,128,opt,name=skip_backward,json=skipBackward,proto3,oneof"`
+}
+
+type Command_Input struct {
+	Input *Input `protobuf:"bytes,129,opt,name=input,proto3,oneof"`
+}
+
+type Command_AudioOutput struct {
+	AudioOutput *AudioOutput `protobuf:"bytes,130,opt,name=audio_output,json=audioOutput,proto3,oneof"`
+}
+
 func (*Command_OnOff) isCommand_Details() {}
 
 func (*Command_BrightnessAbsolute) isCommand_Details() {}
@@ -539,11 +595,19 @@ func (*Command_SetHumidity) isCommand_Details() {}
 
 func (*Command_Colour) isCommand_Details() {}
 
+func (*Command_SkipForward) isCommand_Details() {}
+
+func (*Command_SkipBackward) isCommand_Details() {}
+
+func (*Command_Input) isCommand_Details() {}
+
+func (*Command_AudioOutput) isCommand_Details() {}
+
 var File_api_command_command_proto protoreflect.FileDescriptor
 
 const file_api_command_command_proto_rawDesc = "" +
 	"\n" +
-	"\x19api/command/command.proto\x12\x19faltung.house.api.command\x1a\x15api/command/app.proto\x1a\x1capi/command/brightness.proto\x1a\x19api/command/channel.proto\x1a\x18api/command/colour.proto\x1a\x17api/command/media.proto\x1a\x16api/command/mode.proto\x1a\x1aapi/command/movement.proto\x1a\x17api/command/onoff.proto\x1a\x1aapi/command/position.proto\x1a\x17api/command/speed.proto\x1a\x1capi/command/thermostat.proto\x1a\x16api/command/time.proto\x1a\x17api/command/timer.proto\x1a\x18api/command/toggle.proto\x1a\x1dapi/command/ventilation.proto\x1a\x18api/command/volume.proto\"\xe2\x10\n" +
+	"\x19api/command/command.proto\x12\x19faltung.house.api.command\x1a\x15api/command/app.proto\x1a\x1eapi/command/audio_output.proto\x1a\x1capi/command/brightness.proto\x1a\x19api/command/channel.proto\x1a\x18api/command/colour.proto\x1a\x17api/command/input.proto\x1a\x17api/command/media.proto\x1a\x16api/command/mode.proto\x1a\x1aapi/command/movement.proto\x1a\x17api/command/onoff.proto\x1a\x1aapi/command/position.proto\x1a\x17api/command/speed.proto\x1a\x1capi/command/thermostat.proto\x1a\x16api/command/time.proto\x1a\x17api/command/timer.proto\x1a\x18api/command/toggle.proto\x1a\x1dapi/command/ventilation.proto\x1a\x18api/command/volume.proto\"\x89\x13\n" +
 	"\aCommand\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x18\n" +
@@ -575,7 +639,11 @@ const file_api_command_command_proto_rawDesc = "" +
 	"\x0fset_ventilation\x18{ \x01(\v2).faltung.house.api.command.SetVentilationH\x00R\x0esetVentilation\x12^\n" +
 	"\x13set_comfort_profile\x18| \x01(\v2,.faltung.house.api.command.SetComfortProfileH\x00R\x11setComfortProfile\x12K\n" +
 	"\fset_humidity\x18} \x01(\v2&.faltung.house.api.command.SetHumidityH\x00R\vsetHumidity\x12;\n" +
-	"\x06colour\x18~ \x01(\v2!.faltung.house.api.command.ColourH\x00R\x06colourB\t\n" +
+	"\x06colour\x18~ \x01(\v2!.faltung.house.api.command.ColourH\x00R\x06colour\x12K\n" +
+	"\fskip_forward\x18\x7f \x01(\v2&.faltung.house.api.command.SkipForwardH\x00R\vskipForward\x12O\n" +
+	"\rskip_backward\x18\x80\x01 \x01(\v2'.faltung.house.api.command.SkipBackwardH\x00R\fskipBackward\x129\n" +
+	"\x05input\x18\x81\x01 \x01(\v2 .faltung.house.api.command.InputH\x00R\x05input\x12L\n" +
+	"\faudio_output\x18\x82\x01 \x01(\v2&.faltung.house.api.command.AudioOutputH\x00R\vaudioOutputB\t\n" +
 	"\adetailsB)Z'github.com/rmrobinson/house/api/commandb\x06proto3"
 
 var (
@@ -620,6 +688,10 @@ var file_api_command_command_proto_goTypes = []any{
 	(*SetComfortProfile)(nil),    // 25: faltung.house.api.command.SetComfortProfile
 	(*SetHumidity)(nil),          // 26: faltung.house.api.command.SetHumidity
 	(*Colour)(nil),               // 27: faltung.house.api.command.Colour
+	(*SkipForward)(nil),          // 28: faltung.house.api.command.SkipForward
+	(*SkipBackward)(nil),         // 29: faltung.house.api.command.SkipBackward
+	(*Input)(nil),                // 30: faltung.house.api.command.Input
+	(*AudioOutput)(nil),          // 31: faltung.house.api.command.AudioOutput
 }
 var file_api_command_command_proto_depIdxs = []int32{
 	1,  // 0: faltung.house.api.command.Command.on_off:type_name -> faltung.house.api.command.OnOff
@@ -649,11 +721,15 @@ var file_api_command_command_proto_depIdxs = []int32{
 	25, // 24: faltung.house.api.command.Command.set_comfort_profile:type_name -> faltung.house.api.command.SetComfortProfile
 	26, // 25: faltung.house.api.command.Command.set_humidity:type_name -> faltung.house.api.command.SetHumidity
 	27, // 26: faltung.house.api.command.Command.colour:type_name -> faltung.house.api.command.Colour
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	28, // 27: faltung.house.api.command.Command.skip_forward:type_name -> faltung.house.api.command.SkipForward
+	29, // 28: faltung.house.api.command.Command.skip_backward:type_name -> faltung.house.api.command.SkipBackward
+	30, // 29: faltung.house.api.command.Command.input:type_name -> faltung.house.api.command.Input
+	31, // 30: faltung.house.api.command.Command.audio_output:type_name -> faltung.house.api.command.AudioOutput
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_api_command_command_proto_init() }
@@ -662,9 +738,11 @@ func file_api_command_command_proto_init() {
 		return
 	}
 	file_api_command_app_proto_init()
+	file_api_command_audio_output_proto_init()
 	file_api_command_brightness_proto_init()
 	file_api_command_channel_proto_init()
 	file_api_command_colour_proto_init()
+	file_api_command_input_proto_init()
 	file_api_command_media_proto_init()
 	file_api_command_mode_proto_init()
 	file_api_command_movement_proto_init()
@@ -705,6 +783,10 @@ func file_api_command_command_proto_init() {
 		(*Command_SetComfortProfile)(nil),
 		(*Command_SetHumidity)(nil),
 		(*Command_Colour)(nil),
+		(*Command_SkipForward)(nil),
+		(*Command_SkipBackward)(nil),
+		(*Command_Input)(nil),
+		(*Command_AudioOutput)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

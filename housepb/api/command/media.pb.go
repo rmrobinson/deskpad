@@ -212,6 +212,82 @@ func (x *SeekRelative) GetDeltaS() float64 {
 	return 0
 }
 
+// SkipForward advances to the next item in the device's playback queue.
+// Only meaningful when trait.Media.Attributes.can_skip_forward is true.
+type SkipForward struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkipForward) Reset() {
+	*x = SkipForward{}
+	mi := &file_api_command_media_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkipForward) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkipForward) ProtoMessage() {}
+
+func (x *SkipForward) ProtoReflect() protoreflect.Message {
+	mi := &file_api_command_media_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkipForward.ProtoReflect.Descriptor instead.
+func (*SkipForward) Descriptor() ([]byte, []int) {
+	return file_api_command_media_proto_rawDescGZIP(), []int{3}
+}
+
+// SkipBackward returns to the previous item in the device's playback queue.
+// Only meaningful when trait.Media.Attributes.can_skip_backward is true.
+type SkipBackward struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkipBackward) Reset() {
+	*x = SkipBackward{}
+	mi := &file_api_command_media_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkipBackward) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkipBackward) ProtoMessage() {}
+
+func (x *SkipBackward) ProtoReflect() protoreflect.Message {
+	mi := &file_api_command_media_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkipBackward.ProtoReflect.Descriptor instead.
+func (*SkipBackward) Descriptor() ([]byte, []int) {
+	return file_api_command_media_proto_rawDescGZIP(), []int{4}
+}
+
 var File_api_command_media_proto protoreflect.FileDescriptor
 
 const file_api_command_media_proto_rawDesc = "" +
@@ -228,7 +304,9 @@ const file_api_command_media_proto_rawDesc = "" +
 	"\n" +
 	"position_s\x18\x01 \x01(\x01R\tpositionS\"'\n" +
 	"\fSeekRelative\x12\x17\n" +
-	"\adelta_s\x18\x01 \x01(\x01R\x06deltaSB)Z'github.com/rmrobinson/house/api/commandb\x06proto3"
+	"\adelta_s\x18\x01 \x01(\x01R\x06deltaS\"\r\n" +
+	"\vSkipForward\"\x0e\n" +
+	"\fSkipBackwardB)Z'github.com/rmrobinson/house/api/commandb\x06proto3"
 
 var (
 	file_api_command_media_proto_rawDescOnce sync.Once
@@ -243,12 +321,14 @@ func file_api_command_media_proto_rawDescGZIP() []byte {
 }
 
 var file_api_command_media_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_command_media_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_api_command_media_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_api_command_media_proto_goTypes = []any{
 	(Playback_Action)(0), // 0: faltung.house.api.command.Playback.Action
 	(*Playback)(nil),     // 1: faltung.house.api.command.Playback
 	(*SeekAbsolute)(nil), // 2: faltung.house.api.command.SeekAbsolute
 	(*SeekRelative)(nil), // 3: faltung.house.api.command.SeekRelative
+	(*SkipForward)(nil),  // 4: faltung.house.api.command.SkipForward
+	(*SkipBackward)(nil), // 5: faltung.house.api.command.SkipBackward
 }
 var file_api_command_media_proto_depIdxs = []int32{
 	0, // 0: faltung.house.api.command.Playback.action:type_name -> faltung.house.api.command.Playback.Action
@@ -270,7 +350,7 @@ func file_api_command_media_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_command_media_proto_rawDesc), len(file_api_command_media_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

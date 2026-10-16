@@ -78,7 +78,9 @@ type AudioOutput_Attributes struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// If true, control of the device input property is possible.
 	// If false, control is not allowed and the property is read-only.
-	CanControl    bool `protobuf:"varint,1,opt,name=can_control,json=canControl,proto3" json:"can_control,omitempty"`
+	CanControl bool `protobuf:"varint,1,opt,name=can_control,json=canControl,proto3" json:"can_control,omitempty"`
+	// If true, this is a stereo device (has a left and right speaker).
+	IsStereo      bool `protobuf:"varint,2,opt,name=is_stereo,json=isStereo,proto3" json:"is_stereo,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -116,6 +118,13 @@ func (*AudioOutput_Attributes) Descriptor() ([]byte, []int) {
 func (x *AudioOutput_Attributes) GetCanControl() bool {
 	if x != nil {
 		return x.CanControl
+	}
+	return false
+}
+
+func (x *AudioOutput_Attributes) GetIsStereo() bool {
+	if x != nil {
+		return x.IsStereo
 	}
 	return false
 }
@@ -187,16 +196,17 @@ var File_api_trait_audio_output_proto protoreflect.FileDescriptor
 
 const file_api_trait_audio_output_proto_rawDesc = "" +
 	"\n" +
-	"\x1capi/trait/audio_output.proto\x12\x17faltung.house.api.trait\"\xc5\x02\n" +
+	"\x1capi/trait/audio_output.proto\x12\x17faltung.house.api.trait\"\xe2\x02\n" +
 	"\vAudioOutput\x12O\n" +
 	"\n" +
 	"attributes\x18\x01 \x01(\v2/.faltung.house.api.trait.AudioOutput.AttributesR\n" +
 	"attributes\x12@\n" +
-	"\x05state\x18\x02 \x01(\v2*.faltung.house.api.trait.AudioOutput.StateR\x05state\x1a-\n" +
+	"\x05state\x18\x02 \x01(\v2*.faltung.house.api.trait.AudioOutput.StateR\x05state\x1aJ\n" +
 	"\n" +
 	"Attributes\x12\x1f\n" +
 	"\vcan_control\x18\x01 \x01(\bR\n" +
-	"canControl\x1at\n" +
+	"canControl\x12\x1b\n" +
+	"\tis_stereo\x18\x02 \x01(\bR\bisStereo\x1at\n" +
 	"\x05State\x12!\n" +
 	"\ftreble_level\x18\x01 \x01(\x05R\vtrebleLevel\x12\x1d\n" +
 	"\n" +
