@@ -27,6 +27,7 @@ const (
 	BridgeService_UpdateDeviceConfig_FullMethodName  = "/faltung.house.api.BridgeService/UpdateDeviceConfig"
 	BridgeService_ExecuteCommand_FullMethodName      = "/faltung.house.api.BridgeService/ExecuteCommand"
 	BridgeService_ExecuteCommandAsync_FullMethodName = "/faltung.house.api.BridgeService/ExecuteCommandAsync"
+	BridgeService_GetDeviceHistory_FullMethodName    = "/faltung.house.api.BridgeService/GetDeviceHistory"
 	BridgeService_StreamUpdates_FullMethodName       = "/faltung.house.api.BridgeService/StreamUpdates"
 )
 
@@ -38,8 +39,23 @@ type BridgeServiceClient interface {
 	ListDevices(ctx context.Context, in *ListDevicesRequest, opts ...grpc.CallOption) (*ListDevicesResponse, error)
 	GetDevice(ctx context.Context, in *GetDeviceRequest, opts ...grpc.CallOption) (*device.Device, error)
 	UpdateDeviceConfig(ctx context.Context, in *UpdateDeviceConfigRequest, opts ...grpc.CallOption) (*device.Device, error)
+	// ExecuteCommand runs a command against a device and returns its updated state.
+	//
+	// A bridge MAY supersede commands to a device that is slow to respond: a newer command to the
+	// same device replaces older ones still waiting for it (and the one in flight), and an on/off
+	// command replaces older brightness/colour commands, so a burst of requests to an unresponsive
+	// device never plays back stale, out of order, after a later one. A command replaced this way
+	// fails with ABORTED; one that waited too long for its turn fails with DEADLINE_EXCEEDED. A
+	// command already on the wire can't be recalled, so ABORTED means "a newer command now governs
+	// this device", not "the device never applied it".
+	//
+	// A command identical in effect to one already pending (same on/off, same absolute brightness,
+	// same colour) may be coalesced with it rather than sent again: the caller gets that command's
+	// outcome. See service/bridge.CommandLane.
 	ExecuteCommand(ctx context.Context, in *command.Command, opts ...grpc.CallOption) (*device.Device, error)
 	ExecuteCommandAsync(ctx context.Context, in *command.Command, opts ...grpc.CallOption) (*ExecuteCommandAsyncResponse, error)
+	// GetDeviceHistory streams a device's recorded samples, oldest first.
+	GetDeviceHistory(ctx context.Context, in *GetDeviceHistoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HistorySample], error)
 	StreamUpdates(ctx context.Context, in *StreamUpdatesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Update], error)
 }
 
@@ -111,9 +127,28 @@ func (c *bridgeServiceClient) ExecuteCommandAsync(ctx context.Context, in *comma
 	return out, nil
 }
 
+func (c *bridgeServiceClient) GetDeviceHistory(ctx context.Context, in *GetDeviceHistoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HistorySample], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &BridgeService_ServiceDesc.Streams[0], BridgeService_GetDeviceHistory_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetDeviceHistoryRequest, HistorySample]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BridgeService_GetDeviceHistoryClient = grpc.ServerStreamingClient[HistorySample]
+
 func (c *bridgeServiceClient) StreamUpdates(ctx context.Context, in *StreamUpdatesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Update], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &BridgeService_ServiceDesc.Streams[0], BridgeService_StreamUpdates_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &BridgeService_ServiceDesc.Streams[1], BridgeService_StreamUpdates_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +173,23 @@ type BridgeServiceServer interface {
 	ListDevices(context.Context, *ListDevicesRequest) (*ListDevicesResponse, error)
 	GetDevice(context.Context, *GetDeviceRequest) (*device.Device, error)
 	UpdateDeviceConfig(context.Context, *UpdateDeviceConfigRequest) (*device.Device, error)
+	// ExecuteCommand runs a command against a device and returns its updated state.
+	//
+	// A bridge MAY supersede commands to a device that is slow to respond: a newer command to the
+	// same device replaces older ones still waiting for it (and the one in flight), and an on/off
+	// command replaces older brightness/colour commands, so a burst of requests to an unresponsive
+	// device never plays back stale, out of order, after a later one. A command replaced this way
+	// fails with ABORTED; one that waited too long for its turn fails with DEADLINE_EXCEEDED. A
+	// command already on the wire can't be recalled, so ABORTED means "a newer command now governs
+	// this device", not "the device never applied it".
+	//
+	// A command identical in effect to one already pending (same on/off, same absolute brightness,
+	// same colour) may be coalesced with it rather than sent again: the caller gets that command's
+	// outcome. See service/bridge.CommandLane.
 	ExecuteCommand(context.Context, *command.Command) (*device.Device, error)
 	ExecuteCommandAsync(context.Context, *command.Command) (*ExecuteCommandAsyncResponse, error)
+	// GetDeviceHistory streams a device's recorded samples, oldest first.
+	GetDeviceHistory(*GetDeviceHistoryRequest, grpc.ServerStreamingServer[HistorySample]) error
 	StreamUpdates(*StreamUpdatesRequest, grpc.ServerStreamingServer[Update]) error
 	mustEmbedUnimplementedBridgeServiceServer()
 }
@@ -168,6 +218,9 @@ func (UnimplementedBridgeServiceServer) ExecuteCommand(context.Context, *command
 }
 func (UnimplementedBridgeServiceServer) ExecuteCommandAsync(context.Context, *command.Command) (*ExecuteCommandAsyncResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteCommandAsync not implemented")
+}
+func (UnimplementedBridgeServiceServer) GetDeviceHistory(*GetDeviceHistoryRequest, grpc.ServerStreamingServer[HistorySample]) error {
+	return status.Error(codes.Unimplemented, "method GetDeviceHistory not implemented")
 }
 func (UnimplementedBridgeServiceServer) StreamUpdates(*StreamUpdatesRequest, grpc.ServerStreamingServer[Update]) error {
 	return status.Error(codes.Unimplemented, "method StreamUpdates not implemented")
@@ -301,6 +354,17 @@ func _BridgeService_ExecuteCommandAsync_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BridgeService_GetDeviceHistory_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetDeviceHistoryRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(BridgeServiceServer).GetDeviceHistory(m, &grpc.GenericServerStream[GetDeviceHistoryRequest, HistorySample]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BridgeService_GetDeviceHistoryServer = grpc.ServerStreamingServer[HistorySample]
+
 func _BridgeService_StreamUpdates_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StreamUpdatesRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -345,6 +409,11 @@ var BridgeService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetDeviceHistory",
+			Handler:       _BridgeService_GetDeviceHistory_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "StreamUpdates",
 			Handler:       _BridgeService_StreamUpdates_Handler,

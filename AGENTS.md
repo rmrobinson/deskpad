@@ -14,6 +14,7 @@ The daemon in `cmd/deskpadd` wires control surfaces to optional integrations:
 - Divoom Timebox display control, including clock, temperature, and weather display.
 - A weather gRPC integration (weather-server) for current conditions.
 - An HTTP server (default `:1337`) serving the web UI and a JSON API.
+- A house bridge gRPC server (`bridge.addr`, optional) exposing this DeskPad instance itself as a house `MediaPlayer` device - its local media playback, volume, and screen selection - so a house aggregator can control it. This is the server side of the house protocol; the `House` controller (used by the house device screens) is the client side, talking to other bridges. The two are deliberately separate roles for now - see `ui/controllers/bridge.go`.
 
 ## Repository Layout
 
@@ -24,6 +25,8 @@ The daemon in `cmd/deskpadd` wires control surfaces to optional integrations:
 - `surface_web.go`: Web surface — stores rendered snapshot and broadcasts updates to SSE subscribers.
 - `cmd/deskpadd`: Main daemon, config loading, integration setup, Spotify auth, and HTTP server.
 - `cmd/deskpadd/api.go`: HTTP handlers — web UI assets, `/status`, and the `/api/ui/` surface API.
+- `cmd/deskpadd/bridge.go`: gRPC server credential setup for the house bridge listener (`bridge.*` config).
+- `ui/controllers/bridge.go`: `Bridge`, the `BridgeServiceServer` implementation exposing this DeskPad instance as a house device.
 - `cmd/deskpadd/web/`: Embedded web UI (HTML, PWA manifest, service worker, icons).
 - `ui`: Shared UI domain types, such as media items and audio outputs.
 - `ui/controllers`: Integration-facing controllers. These own external service calls and cached state.
@@ -75,6 +78,17 @@ The daemon listens on the address from `web.addr` (default `:1337`). All endpoin
 
 The `UIStateResponse` type encodes each key image as a `data:image/png;base64,…` data URL so the browser can render them directly.
 
+## House Bridge Server
+
+When `bridge.addr` is set, the daemon also runs a gRPC server implementing the house `BridgeService` (`housepb/api/bridge_grpc.pb.go`), letting a house aggregator control this DeskPad instance the way it controls any other bridge on the mesh.
+
+- `ui/controllers/bridge.go` (`Bridge`) is the implementation. It exposes exactly one `device.MediaPlayer` device, backed by whichever local media player controller (`LinuxMediaPlayer` or `SpotifyMediaPlayer`) is active:
+  - **Media trait** — play/pause, fixed-step fast-forward/rewind via `SeekRelative`'s sign, and track skip via `SkipForward`/`SkipBackward` (routed to the local players' `Next()`/`Previous()`, which return an error the Bridge surfaces as `Unavailable` rather than reporting success).
+  - **Volume trait** — reads/writes whatever the active controller already treats as "the" volume (PulseAudio for `LinuxMediaPlayer`, the active Spotify Connect device for `SpotifyMediaPlayer`), via `GetVolume()`/`SetVolume()` on `BridgeMediaPlayerController`.
+  - **App trait** — the registered screens (`Home.Screens()`, prefixed with `Home` itself as the default/`AppClose` target) as selectable "applications"; `AppLaunch`/`AppClose` call `Deck.ChangeScreen`.
+- `StreamUpdates` pushes a `DeviceUpdate` on every `ExecuteCommand`/`ExecuteCommandAsync`, plus a 2s poll (`bridgePollInterval`) that only runs while at least one subscriber is attached, so changes made outside a bridge command (a physical key press, pausing Spotify from a phone) still reach subscribers.
+- `cmd/deskpadd/bridge.go` builds the server's `grpc.ServerOption`s from `bridge.*` config; TLS is optional and, when enabled with `bridge.ca-cert` set, requires a verified client certificate (mutual TLS). `bridge.client-name`, if also set, additionally rejects any otherwise-valid client certificate whose DNS SAN doesn't match it — house's step-ca provisioner issues every bridge and `housed` a cert from one shared CA, so chain validation alone would let any of them connect, not just the intended house aggregator. This is the server-side mirror of `house.server-name` on the House client controller (`ui/controllers/house.go`).
+
 ## Coding Standards
 
 - Target Go `1.22.x`, matching `go.mod`.
@@ -122,10 +136,14 @@ Notable config keys:
 - `weather.addr`, `weather.use-tls`, `weather.ca-cert`: weather-server gRPC config.
 - `timebox.addr`, `timebox.channel`, `timebox.color.*`: Timebox Bluetooth config.
 - `bluetooth.adapter-id`: BlueZ adapter name (e.g. `hci0`).
-- `house.addr`: string — the house bridge/aggregator to dial for the house device control screens (`ui/controllers/house.go`). Unset skips that feature entirely.
+- `house.addr`: string — the house bridge/aggregator to dial for the house device control screens (`ui/controllers/house.go`). Unset skips that feature entirely. This is the *client* direction — DeskPad consuming another bridge. `bridge.*` below is the opposite direction.
 - `house.rooms`: list of `{room-id, label}` — one device-list/device-control screen pair per entry; `label` falls back to `room-id` if omitted.
 - `house.use-tls`, `house.ca-cert`, `house.cert-file`, `house.key-file`: mutual TLS for the `house.addr` connection. house's own bridges/`housed` are issued certs by a private step-ca instance (see the `house-config` repo's `docker-compose/README.md` "Mutual TLS" section) — `ca-cert` is that CA's root, `cert-file`/`key-file` are DeskPad's own client identity from the same provisioner.
 - `house.server-name`: string — overrides the hostname the server certificate is verified against. **Required** whenever `house.addr` isn't itself that name, which is the common case here: step-ca issues certs for `<name>.<host>.house.internal` (e.g. `housed.yourhost.house.internal`), essentially never the real address (`yourhost.example.com:<port>`, an IP, etc.) actually dialed. Leaving this unset when it's needed fails TLS verification, not just a config nicety.
+- `bridge.addr`: string — gRPC listen address for the house bridge server; unset disables it. This is the *server* direction — DeskPad exposing itself as a bridge for a house aggregator to dial into.
+- `bridge.device-id`, `bridge.device-name`: stable device ID (defaults to hostname) and display name for the device this DeskPad instance exposes.
+- `bridge.use-tls`, `bridge.cert-file`, `bridge.key-file`, `bridge.ca-cert`: house bridge server TLS config; setting `ca-cert` additionally requires and verifies a client certificate (mutual TLS).
+- `bridge.client-name`: string — restricts inbound mutual-TLS connections to a client certificate whose DNS SAN matches this name (e.g. `housed.yourhost.house.internal`). Requires `bridge.ca-cert` to be set; otherwise there's no verified chain to check a name against.
 
 Sensitive or machine-local config and OAuth token files are ignored by git. Do not add real tokens, device addresses, or personal config values to tracked files.
 

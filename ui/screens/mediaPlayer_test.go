@@ -13,6 +13,8 @@ type mediaPlayerTestController struct {
 	playing bool
 	shuffle bool
 	muted   bool
+	nextErr error
+	prevErr error
 }
 
 func (c *mediaPlayerTestController) Play() {
@@ -23,9 +25,9 @@ func (c *mediaPlayerTestController) Pause() {
 	c.playing = false
 }
 
-func (c *mediaPlayerTestController) Next() {}
+func (c *mediaPlayerTestController) Next() error { return c.nextErr }
 
-func (c *mediaPlayerTestController) Previous() {}
+func (c *mediaPlayerTestController) Previous() error { return c.prevErr }
 
 func (c *mediaPlayerTestController) FastForward() {}
 

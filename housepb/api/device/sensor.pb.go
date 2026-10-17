@@ -10,6 +10,7 @@ import (
 	trait "github.com/rmrobinson/house/api/trait"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -33,6 +34,8 @@ type Sensor struct {
 	Battery       *trait.Battery         `protobuf:"bytes,12,opt,name=battery,proto3,oneof" json:"battery,omitempty"`
 	LightLevel    *trait.LightLevel      `protobuf:"bytes,13,opt,name=light_level,json=lightLevel,proto3,oneof" json:"light_level,omitempty"`
 	Presence      *trait.Presence        `protobuf:"bytes,14,opt,name=presence,proto3,oneof" json:"presence,omitempty"`
+	// Present for battery remotes and other devices whose job is reporting button actions.
+	Buttons *trait.Buttons `protobuf:"bytes,15,opt,name=buttons,proto3,oneof" json:"buttons,omitempty"`
 	// Has an alarm been tripped?
 	Alarm *Sensor_BinarySensor `protobuf:"bytes,51,opt,name=alarm,proto3,oneof" json:"alarm,omitempty"`
 	// Has a fire been detected?
@@ -126,6 +129,13 @@ func (x *Sensor) GetPresence() *trait.Presence {
 	return nil
 }
 
+func (x *Sensor) GetButtons() *trait.Buttons {
+	if x != nil {
+		return x.Buttons
+	}
+	return nil
+}
+
 func (x *Sensor) GetAlarm() *Sensor_BinarySensor {
 	if x != nil {
 		return x.Alarm
@@ -171,7 +181,9 @@ type Sensor_Metadata struct {
 	// Is the battery of this device low? If so, this will be true. Will never be true for hardwired sensors.
 	LowBattery bool `protobuf:"varint,3,opt,name=low_battery,json=lowBattery,proto3" json:"low_battery,omitempty"`
 	// Is the device charging?
-	Charging      bool `protobuf:"varint,4,opt,name=charging,proto3" json:"charging,omitempty"`
+	Charging bool `protobuf:"varint,4,opt,name=charging,proto3" json:"charging,omitempty"`
+	// Unset if the device has no retrievable history.
+	History       *Sensor_Metadata_History `protobuf:"bytes,5,opt,name=history,proto3,oneof" json:"history,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,6 +244,13 @@ func (x *Sensor_Metadata) GetCharging() bool {
 		return x.Charging
 	}
 	return false
+}
+
+func (x *Sensor_Metadata) GetHistory() *Sensor_Metadata_History {
+	if x != nil {
+		return x.History
+	}
+	return nil
 }
 
 type Sensor_PowerConsumption struct {
@@ -332,12 +351,67 @@ func (x *Sensor_BinarySensor) GetIsActive() bool {
 	return false
 }
 
+// History advertises that the device records samples itself and the
+// bridge can fetch them via BridgeService.GetDeviceHistory.
+type Sensor_Metadata_History struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The furthest back from now a single request can reach.
+	MaxWindow *durationpb.Duration `protobuf:"bytes,1,opt,name=max_window,json=maxWindow,proto3" json:"max_window,omitempty"`
+	// The spacing between recorded samples.
+	SampleInterval *durationpb.Duration `protobuf:"bytes,2,opt,name=sample_interval,json=sampleInterval,proto3" json:"sample_interval,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *Sensor_Metadata_History) Reset() {
+	*x = Sensor_Metadata_History{}
+	mi := &file_api_device_sensor_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Sensor_Metadata_History) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Sensor_Metadata_History) ProtoMessage() {}
+
+func (x *Sensor_Metadata_History) ProtoReflect() protoreflect.Message {
+	mi := &file_api_device_sensor_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Sensor_Metadata_History.ProtoReflect.Descriptor instead.
+func (*Sensor_Metadata_History) Descriptor() ([]byte, []int) {
+	return file_api_device_sensor_proto_rawDescGZIP(), []int{0, 0, 0}
+}
+
+func (x *Sensor_Metadata_History) GetMaxWindow() *durationpb.Duration {
+	if x != nil {
+		return x.MaxWindow
+	}
+	return nil
+}
+
+func (x *Sensor_Metadata_History) GetSampleInterval() *durationpb.Duration {
+	if x != nil {
+		return x.SampleInterval
+	}
+	return nil
+}
+
 var File_api_device_sensor_proto protoreflect.FileDescriptor
 
 const file_api_device_sensor_proto_rawDesc = "" +
 	"\n" +
-	"\x17api/device/sensor.proto\x12\x18faltung.house.api.device\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1eapi/trait/air_properties.proto\x1a\x1bapi/trait/air_quality.proto\x1a\x17api/trait/battery.proto\x1a\x1bapi/trait/light_level.proto\x1a\x15api/trait/power.proto\x1a\x18api/trait/presence.proto\"\xf8\n" +
-	"\n" +
+	"\x17api/device/sensor.proto\x12\x18faltung.house.api.device\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1eapi/trait/air_properties.proto\x1a\x1bapi/trait/air_quality.proto\x1a\x17api/trait/battery.proto\x1a\x16api/trait/button.proto\x1a\x1bapi/trait/light_level.proto\x1a\x15api/trait/power.proto\x1a\x18api/trait/presence.proto\"\xad\r\n" +
 	"\x06Sensor\x12J\n" +
 	"\bmetadata\x18\x01 \x01(\v2).faltung.house.api.device.Sensor.MetadataH\x00R\bmetadata\x88\x01\x01\x12R\n" +
 	"\x0eair_properties\x182 \x01(\v2&.faltung.house.api.trait.AirPropertiesH\x01R\rairProperties\x88\x01\x01\x12I\n" +
@@ -348,20 +422,28 @@ const file_api_device_sensor_proto_rawDesc = "" +
 	"\abattery\x18\f \x01(\v2 .faltung.house.api.trait.BatteryH\x04R\abattery\x88\x01\x01\x12I\n" +
 	"\vlight_level\x18\r \x01(\v2#.faltung.house.api.trait.LightLevelH\x05R\n" +
 	"lightLevel\x88\x01\x01\x12B\n" +
-	"\bpresence\x18\x0e \x01(\v2!.faltung.house.api.trait.PresenceH\x06R\bpresence\x88\x01\x01\x12H\n" +
-	"\x05alarm\x183 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\aR\x05alarm\x88\x01\x01\x12F\n" +
-	"\x04fire\x184 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\bR\x04fire\x88\x01\x01\x12H\n" +
-	"\x05water\x185 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\tR\x05water\x88\x01\x01\x12W\n" +
-	"\ropened_closed\x186 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\n" +
-	"R\fopenedClosed\x88\x01\x01\x12c\n" +
-	"\x11power_consumption\x187 \x01(\v21.faltung.house.api.device.Sensor.PowerConsumptionH\vR\x10powerConsumption\x88\x01\x01\x1a\xa7\x01\n" +
+	"\bpresence\x18\x0e \x01(\v2!.faltung.house.api.trait.PresenceH\x06R\bpresence\x88\x01\x01\x12?\n" +
+	"\abuttons\x18\x0f \x01(\v2 .faltung.house.api.trait.ButtonsH\aR\abuttons\x88\x01\x01\x12H\n" +
+	"\x05alarm\x183 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\bR\x05alarm\x88\x01\x01\x12F\n" +
+	"\x04fire\x184 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\tR\x04fire\x88\x01\x01\x12H\n" +
+	"\x05water\x185 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\n" +
+	"R\x05water\x88\x01\x01\x12W\n" +
+	"\ropened_closed\x186 \x01(\v2-.faltung.house.api.device.Sensor.BinarySensorH\vR\fopenedClosed\x88\x01\x01\x12c\n" +
+	"\x11power_consumption\x187 \x01(\v21.faltung.house.api.device.Sensor.PowerConsumptionH\fR\x10powerConsumption\x88\x01\x01\x1a\x8f\x03\n" +
 	"\bMetadata\x12?\n" +
 	"\rlast_reported\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\flastReported\x12\x1d\n" +
 	"\n" +
 	"on_battery\x18\x02 \x01(\bR\tonBattery\x12\x1f\n" +
 	"\vlow_battery\x18\x03 \x01(\bR\n" +
 	"lowBattery\x12\x1a\n" +
-	"\bcharging\x18\x04 \x01(\bR\bcharging\x1a_\n" +
+	"\bcharging\x18\x04 \x01(\bR\bcharging\x12P\n" +
+	"\ahistory\x18\x05 \x01(\v21.faltung.house.api.device.Sensor.Metadata.HistoryH\x00R\ahistory\x88\x01\x01\x1a\x87\x01\n" +
+	"\aHistory\x128\n" +
+	"\n" +
+	"max_window\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tmaxWindow\x12B\n" +
+	"\x0fsample_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0esampleIntervalB\n" +
+	"\n" +
+	"\b_history\x1a_\n" +
 	"\x10PowerConsumption\x12'\n" +
 	"\x0fconsumption_kwh\x18\x01 \x01(\x02R\x0econsumptionKwh\x12\"\n" +
 	"\rpower_usage_w\x18\x02 \x01(\x02R\vpowerUsageW\x1a+\n" +
@@ -374,7 +456,9 @@ const file_api_device_sensor_proto_rawDesc = "" +
 	"\n" +
 	"\b_batteryB\x0e\n" +
 	"\f_light_levelB\v\n" +
-	"\t_presenceB\b\n" +
+	"\t_presenceB\n" +
+	"\n" +
+	"\b_buttonsB\b\n" +
 	"\x06_alarmB\a\n" +
 	"\x05_fireB\b\n" +
 	"\x06_waterB\x10\n" +
@@ -393,39 +477,46 @@ func file_api_device_sensor_proto_rawDescGZIP() []byte {
 	return file_api_device_sensor_proto_rawDescData
 }
 
-var file_api_device_sensor_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_api_device_sensor_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_api_device_sensor_proto_goTypes = []any{
 	(*Sensor)(nil),                  // 0: faltung.house.api.device.Sensor
 	(*Sensor_Metadata)(nil),         // 1: faltung.house.api.device.Sensor.Metadata
 	(*Sensor_PowerConsumption)(nil), // 2: faltung.house.api.device.Sensor.PowerConsumption
 	(*Sensor_BinarySensor)(nil),     // 3: faltung.house.api.device.Sensor.BinarySensor
-	(*trait.AirProperties)(nil),     // 4: faltung.house.api.trait.AirProperties
-	(*trait.AirQuality)(nil),        // 5: faltung.house.api.trait.AirQuality
-	(*trait.Power)(nil),             // 6: faltung.house.api.trait.Power
-	(*trait.Battery)(nil),           // 7: faltung.house.api.trait.Battery
-	(*trait.LightLevel)(nil),        // 8: faltung.house.api.trait.LightLevel
-	(*trait.Presence)(nil),          // 9: faltung.house.api.trait.Presence
-	(*timestamppb.Timestamp)(nil),   // 10: google.protobuf.Timestamp
+	(*Sensor_Metadata_History)(nil), // 4: faltung.house.api.device.Sensor.Metadata.History
+	(*trait.AirProperties)(nil),     // 5: faltung.house.api.trait.AirProperties
+	(*trait.AirQuality)(nil),        // 6: faltung.house.api.trait.AirQuality
+	(*trait.Power)(nil),             // 7: faltung.house.api.trait.Power
+	(*trait.Battery)(nil),           // 8: faltung.house.api.trait.Battery
+	(*trait.LightLevel)(nil),        // 9: faltung.house.api.trait.LightLevel
+	(*trait.Presence)(nil),          // 10: faltung.house.api.trait.Presence
+	(*trait.Buttons)(nil),           // 11: faltung.house.api.trait.Buttons
+	(*timestamppb.Timestamp)(nil),   // 12: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),     // 13: google.protobuf.Duration
 }
 var file_api_device_sensor_proto_depIdxs = []int32{
 	1,  // 0: faltung.house.api.device.Sensor.metadata:type_name -> faltung.house.api.device.Sensor.Metadata
-	4,  // 1: faltung.house.api.device.Sensor.air_properties:type_name -> faltung.house.api.trait.AirProperties
-	5,  // 2: faltung.house.api.device.Sensor.air_quality:type_name -> faltung.house.api.trait.AirQuality
-	6,  // 3: faltung.house.api.device.Sensor.power:type_name -> faltung.house.api.trait.Power
-	7,  // 4: faltung.house.api.device.Sensor.battery:type_name -> faltung.house.api.trait.Battery
-	8,  // 5: faltung.house.api.device.Sensor.light_level:type_name -> faltung.house.api.trait.LightLevel
-	9,  // 6: faltung.house.api.device.Sensor.presence:type_name -> faltung.house.api.trait.Presence
-	3,  // 7: faltung.house.api.device.Sensor.alarm:type_name -> faltung.house.api.device.Sensor.BinarySensor
-	3,  // 8: faltung.house.api.device.Sensor.fire:type_name -> faltung.house.api.device.Sensor.BinarySensor
-	3,  // 9: faltung.house.api.device.Sensor.water:type_name -> faltung.house.api.device.Sensor.BinarySensor
-	3,  // 10: faltung.house.api.device.Sensor.opened_closed:type_name -> faltung.house.api.device.Sensor.BinarySensor
-	2,  // 11: faltung.house.api.device.Sensor.power_consumption:type_name -> faltung.house.api.device.Sensor.PowerConsumption
-	10, // 12: faltung.house.api.device.Sensor.Metadata.last_reported:type_name -> google.protobuf.Timestamp
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	5,  // 1: faltung.house.api.device.Sensor.air_properties:type_name -> faltung.house.api.trait.AirProperties
+	6,  // 2: faltung.house.api.device.Sensor.air_quality:type_name -> faltung.house.api.trait.AirQuality
+	7,  // 3: faltung.house.api.device.Sensor.power:type_name -> faltung.house.api.trait.Power
+	8,  // 4: faltung.house.api.device.Sensor.battery:type_name -> faltung.house.api.trait.Battery
+	9,  // 5: faltung.house.api.device.Sensor.light_level:type_name -> faltung.house.api.trait.LightLevel
+	10, // 6: faltung.house.api.device.Sensor.presence:type_name -> faltung.house.api.trait.Presence
+	11, // 7: faltung.house.api.device.Sensor.buttons:type_name -> faltung.house.api.trait.Buttons
+	3,  // 8: faltung.house.api.device.Sensor.alarm:type_name -> faltung.house.api.device.Sensor.BinarySensor
+	3,  // 9: faltung.house.api.device.Sensor.fire:type_name -> faltung.house.api.device.Sensor.BinarySensor
+	3,  // 10: faltung.house.api.device.Sensor.water:type_name -> faltung.house.api.device.Sensor.BinarySensor
+	3,  // 11: faltung.house.api.device.Sensor.opened_closed:type_name -> faltung.house.api.device.Sensor.BinarySensor
+	2,  // 12: faltung.house.api.device.Sensor.power_consumption:type_name -> faltung.house.api.device.Sensor.PowerConsumption
+	12, // 13: faltung.house.api.device.Sensor.Metadata.last_reported:type_name -> google.protobuf.Timestamp
+	4,  // 14: faltung.house.api.device.Sensor.Metadata.history:type_name -> faltung.house.api.device.Sensor.Metadata.History
+	13, // 15: faltung.house.api.device.Sensor.Metadata.History.max_window:type_name -> google.protobuf.Duration
+	13, // 16: faltung.house.api.device.Sensor.Metadata.History.sample_interval:type_name -> google.protobuf.Duration
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_api_device_sensor_proto_init() }
@@ -434,13 +525,14 @@ func file_api_device_sensor_proto_init() {
 		return
 	}
 	file_api_device_sensor_proto_msgTypes[0].OneofWrappers = []any{}
+	file_api_device_sensor_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_device_sensor_proto_rawDesc), len(file_api_device_sensor_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

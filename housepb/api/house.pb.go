@@ -1850,8 +1850,13 @@ type Room_Properties struct {
 	// if none has a water sensor. Always "any" - a leak anywhere in the room
 	// counts, so this has no aggregation strategy.
 	WaterDetected *bool `protobuf:"varint,10,opt,name=water_detected,json=waterDetected,proto3,oneof" json:"water_detected,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Shortest estimated battery runtime, in minutes, across the room's linked
+	// UPSes (UPS.battery.capacity_remaining_mins); unset if none is linked.
+	// Always "min" - the first UPS to run out is the one that matters - so
+	// this has no aggregation strategy.
+	BatteryRuntimeMins *int32 `protobuf:"varint,11,opt,name=battery_runtime_mins,json=batteryRuntimeMins,proto3,oneof" json:"battery_runtime_mins,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Room_Properties) Reset() {
@@ -1945,6 +1950,13 @@ func (x *Room_Properties) GetWaterDetected() bool {
 		return *x.WaterDetected
 	}
 	return false
+}
+
+func (x *Room_Properties) GetBatteryRuntimeMins() int32 {
+	if x != nil && x.BatteryRuntimeMins != nil {
+		return *x.BatteryRuntimeMins
+	}
+	return 0
 }
 
 type Building_Config struct {
@@ -2112,7 +2124,7 @@ const file_api_house_proto_rawDesc = "" +
 	"\x03MIN\x10\x03\x12\a\n" +
 	"\x03MAX\x10\x04\x12\a\n" +
 	"\x03SUM\x10\x05\x12\a\n" +
-	"\x03ANY\x10\x06\"\xca\a\n" +
+	"\x03ANY\x10\x06\"\x9a\b\n" +
 	"\x04Room\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x126\n" +
 	"\x06config\x18\x02 \x01(\v2\x1e.faltung.house.api.Room.ConfigR\x06config\x12B\n" +
@@ -2128,7 +2140,7 @@ const file_api_house_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\x05R\x04type\x12K\n" +
 	"\vaggregation\x18\x03 \x01(\v2$.faltung.house.api.AggregationConfigH\x00R\vaggregation\x88\x01\x01B\x0e\n" +
-	"\f_aggregation\x1a\x93\x04\n" +
+	"\f_aggregation\x1a\xe3\x04\n" +
 	"\n" +
 	"Properties\x12\x1f\n" +
 	"\boccupied\x18\x01 \x01(\bH\x00R\boccupied\x88\x01\x01\x12+\n" +
@@ -2141,7 +2153,8 @@ const file_api_house_proto_rawDesc = "" +
 	"\vradon_bq_m3\x18\b \x01(\x05H\x06R\tradonBqM3\x88\x01\x01\x12(\n" +
 	"\rtemperature_c\x18\t \x01(\x01H\aR\ftemperatureC\x88\x01\x01\x12*\n" +
 	"\x0ewater_detected\x18\n" +
-	" \x01(\bH\bR\rwaterDetected\x88\x01\x01B\v\n" +
+	" \x01(\bH\bR\rwaterDetected\x88\x01\x01\x125\n" +
+	"\x14battery_runtime_mins\x18\v \x01(\x05H\tR\x12batteryRuntimeMins\x88\x01\x01B\v\n" +
 	"\t_occupiedB\x12\n" +
 	"\x10_light_level_luxB\x14\n" +
 	"\x12_air_quality_indexB\x0f\n" +
@@ -2152,7 +2165,8 @@ const file_api_house_proto_rawDesc = "" +
 	"\b_voc_ppbB\x0e\n" +
 	"\f_radon_bq_m3B\x10\n" +
 	"\x0e_temperature_cB\x11\n" +
-	"\x0f_water_detectedJ\x04\b\x02\x10\x03R\rtemperature_f\"\x85\x01\n" +
+	"\x0f_water_detectedB\x17\n" +
+	"\x15_battery_runtime_minsJ\x04\b\x02\x10\x03R\rtemperature_f\"\x85\x01\n" +
 	"\x05Floor\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +

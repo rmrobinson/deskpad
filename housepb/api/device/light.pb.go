@@ -24,11 +24,15 @@ const (
 
 // Light is a device which represents a light in a house.
 type Light struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OnOff         *trait.OnOff           `protobuf:"bytes,1,opt,name=on_off,json=onOff,proto3" json:"on_off,omitempty"`
-	Brightness    *trait.Brightness      `protobuf:"bytes,2,opt,name=brightness,proto3,oneof" json:"brightness,omitempty"`
-	Colour        *trait.Colour          `protobuf:"bytes,3,opt,name=colour,proto3,oneof" json:"colour,omitempty"`
-	Scene         *trait.App             `protobuf:"bytes,4,opt,name=scene,proto3,oneof" json:"scene,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	OnOff      *trait.OnOff           `protobuf:"bytes,1,opt,name=on_off,json=onOff,proto3" json:"on_off,omitempty"`
+	Brightness *trait.Brightness      `protobuf:"bytes,2,opt,name=brightness,proto3,oneof" json:"brightness,omitempty"`
+	Colour     *trait.Colour          `protobuf:"bytes,3,opt,name=colour,proto3,oneof" json:"colour,omitempty"`
+	Scene      *trait.App             `protobuf:"bytes,4,opt,name=scene,proto3,oneof" json:"scene,omitempty"`
+	// Present for lights with built-in power metering (e.g. Inovelli dimmers).
+	Power *trait.Power `protobuf:"bytes,5,opt,name=power,proto3,oneof" json:"power,omitempty"`
+	// Present for lights with physical paddles/buttons which report actions (e.g. Inovelli multi-tap).
+	Buttons       *trait.Buttons `protobuf:"bytes,6,opt,name=buttons,proto3,oneof" json:"buttons,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -91,21 +95,40 @@ func (x *Light) GetScene() *trait.App {
 	return nil
 }
 
+func (x *Light) GetPower() *trait.Power {
+	if x != nil {
+		return x.Power
+	}
+	return nil
+}
+
+func (x *Light) GetButtons() *trait.Buttons {
+	if x != nil {
+		return x.Buttons
+	}
+	return nil
+}
+
 var File_api_device_light_proto protoreflect.FileDescriptor
 
 const file_api_device_light_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/device/light.proto\x12\x18faltung.house.api.device\x1a\x13api/trait/app.proto\x1a\x1aapi/trait/brightness.proto\x1a\x16api/trait/colour.proto\x1a\x15api/trait/onoff.proto\"\xa3\x02\n" +
+	"\x16api/device/light.proto\x12\x18faltung.house.api.device\x1a\x13api/trait/app.proto\x1a\x1aapi/trait/brightness.proto\x1a\x16api/trait/button.proto\x1a\x16api/trait/colour.proto\x1a\x15api/trait/onoff.proto\x1a\x15api/trait/power.proto\"\xb5\x03\n" +
 	"\x05Light\x125\n" +
 	"\x06on_off\x18\x01 \x01(\v2\x1e.faltung.house.api.trait.OnOffR\x05onOff\x12H\n" +
 	"\n" +
 	"brightness\x18\x02 \x01(\v2#.faltung.house.api.trait.BrightnessH\x00R\n" +
 	"brightness\x88\x01\x01\x12<\n" +
 	"\x06colour\x18\x03 \x01(\v2\x1f.faltung.house.api.trait.ColourH\x01R\x06colour\x88\x01\x01\x127\n" +
-	"\x05scene\x18\x04 \x01(\v2\x1c.faltung.house.api.trait.AppH\x02R\x05scene\x88\x01\x01B\r\n" +
+	"\x05scene\x18\x04 \x01(\v2\x1c.faltung.house.api.trait.AppH\x02R\x05scene\x88\x01\x01\x129\n" +
+	"\x05power\x18\x05 \x01(\v2\x1e.faltung.house.api.trait.PowerH\x03R\x05power\x88\x01\x01\x12?\n" +
+	"\abuttons\x18\x06 \x01(\v2 .faltung.house.api.trait.ButtonsH\x04R\abuttons\x88\x01\x01B\r\n" +
 	"\v_brightnessB\t\n" +
 	"\a_colourB\b\n" +
-	"\x06_sceneB(Z&github.com/rmrobinson/house/api/deviceb\x06proto3"
+	"\x06_sceneB\b\n" +
+	"\x06_powerB\n" +
+	"\n" +
+	"\b_buttonsB(Z&github.com/rmrobinson/house/api/deviceb\x06proto3"
 
 var (
 	file_api_device_light_proto_rawDescOnce sync.Once
@@ -126,17 +149,21 @@ var file_api_device_light_proto_goTypes = []any{
 	(*trait.Brightness)(nil), // 2: faltung.house.api.trait.Brightness
 	(*trait.Colour)(nil),     // 3: faltung.house.api.trait.Colour
 	(*trait.App)(nil),        // 4: faltung.house.api.trait.App
+	(*trait.Power)(nil),      // 5: faltung.house.api.trait.Power
+	(*trait.Buttons)(nil),    // 6: faltung.house.api.trait.Buttons
 }
 var file_api_device_light_proto_depIdxs = []int32{
 	1, // 0: faltung.house.api.device.Light.on_off:type_name -> faltung.house.api.trait.OnOff
 	2, // 1: faltung.house.api.device.Light.brightness:type_name -> faltung.house.api.trait.Brightness
 	3, // 2: faltung.house.api.device.Light.colour:type_name -> faltung.house.api.trait.Colour
 	4, // 3: faltung.house.api.device.Light.scene:type_name -> faltung.house.api.trait.App
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 4: faltung.house.api.device.Light.power:type_name -> faltung.house.api.trait.Power
+	6, // 5: faltung.house.api.device.Light.buttons:type_name -> faltung.house.api.trait.Buttons
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_api_device_light_proto_init() }

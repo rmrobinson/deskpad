@@ -12,6 +12,7 @@ import (
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -79,7 +80,7 @@ func (x Update_Action) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Update_Action.Descriptor instead.
 func (Update_Action) EnumDescriptor() ([]byte, []int) {
-	return file_api_bridge_proto_rawDescGZIP(), []int{13, 0}
+	return file_api_bridge_proto_rawDescGZIP(), []int{15, 0}
 }
 
 type Address struct {
@@ -723,6 +724,140 @@ func (x *CommandUpdate) GetResultingVersion() string {
 	return ""
 }
 
+// GetDeviceHistoryRequest asks a bridge for samples a device recorded itself
+// while the bridge wasn't looking (e.g. a BLE sensor's on-board log), so a
+// battery device can be polled rarely and its gaps filled in afterwards.
+// Only devices advertising Sensor.Metadata.history support this; others
+// return UNIMPLEMENTED.
+type GetDeviceHistoryRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// Only samples strictly after this time are returned. Unset means as far
+	// back as the device can report (see Sensor.Metadata.History.max_window).
+	Since *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=since,proto3" json:"since,omitempty"`
+	// Only samples at or before this time are returned. Unset means now.
+	Until *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=until,proto3" json:"until,omitempty"`
+	// Optional cap on the number of samples returned. When it truncates the
+	// result the oldest samples are kept, so a caller can resume from the
+	// last sample's time without skipping any.
+	MaxSamples    int32 `protobuf:"varint,4,opt,name=max_samples,json=maxSamples,proto3" json:"max_samples,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeviceHistoryRequest) Reset() {
+	*x = GetDeviceHistoryRequest{}
+	mi := &file_api_bridge_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeviceHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeviceHistoryRequest) ProtoMessage() {}
+
+func (x *GetDeviceHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_bridge_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeviceHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetDeviceHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_api_bridge_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetDeviceHistoryRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *GetDeviceHistoryRequest) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *GetDeviceHistoryRequest) GetUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Until
+	}
+	return nil
+}
+
+func (x *GetDeviceHistoryRequest) GetMaxSamples() int32 {
+	if x != nil {
+		return x.MaxSamples
+	}
+	return 0
+}
+
+// HistorySample is one recorded point in time for a device.
+type HistorySample struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Time  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	// A device carrying only the trait states that were recorded at this time;
+	// everything else is unset. Never applied to the bridge's cached device.
+	Snapshot      *device.Device `protobuf:"bytes,2,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HistorySample) Reset() {
+	*x = HistorySample{}
+	mi := &file_api_bridge_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HistorySample) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HistorySample) ProtoMessage() {}
+
+func (x *HistorySample) ProtoReflect() protoreflect.Message {
+	mi := &file_api_bridge_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HistorySample.ProtoReflect.Descriptor instead.
+func (*HistorySample) Descriptor() ([]byte, []int) {
+	return file_api_bridge_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *HistorySample) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *HistorySample) GetSnapshot() *device.Device {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
+}
+
 type ExecuteCommandAsyncResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -731,7 +866,7 @@ type ExecuteCommandAsyncResponse struct {
 
 func (x *ExecuteCommandAsyncResponse) Reset() {
 	*x = ExecuteCommandAsyncResponse{}
-	mi := &file_api_bridge_proto_msgTypes[11]
+	mi := &file_api_bridge_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -743,7 +878,7 @@ func (x *ExecuteCommandAsyncResponse) String() string {
 func (*ExecuteCommandAsyncResponse) ProtoMessage() {}
 
 func (x *ExecuteCommandAsyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[11]
+	mi := &file_api_bridge_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -756,7 +891,7 @@ func (x *ExecuteCommandAsyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteCommandAsyncResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteCommandAsyncResponse) Descriptor() ([]byte, []int) {
-	return file_api_bridge_proto_rawDescGZIP(), []int{11}
+	return file_api_bridge_proto_rawDescGZIP(), []int{13}
 }
 
 type StreamUpdatesRequest struct {
@@ -767,7 +902,7 @@ type StreamUpdatesRequest struct {
 
 func (x *StreamUpdatesRequest) Reset() {
 	*x = StreamUpdatesRequest{}
-	mi := &file_api_bridge_proto_msgTypes[12]
+	mi := &file_api_bridge_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -779,7 +914,7 @@ func (x *StreamUpdatesRequest) String() string {
 func (*StreamUpdatesRequest) ProtoMessage() {}
 
 func (x *StreamUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[12]
+	mi := &file_api_bridge_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -792,7 +927,7 @@ func (x *StreamUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*StreamUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_api_bridge_proto_rawDescGZIP(), []int{12}
+	return file_api_bridge_proto_rawDescGZIP(), []int{14}
 }
 
 type Update struct {
@@ -811,7 +946,7 @@ type Update struct {
 
 func (x *Update) Reset() {
 	*x = Update{}
-	mi := &file_api_bridge_proto_msgTypes[13]
+	mi := &file_api_bridge_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +958,7 @@ func (x *Update) String() string {
 func (*Update) ProtoMessage() {}
 
 func (x *Update) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[13]
+	mi := &file_api_bridge_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +971,7 @@ func (x *Update) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Update.ProtoReflect.Descriptor instead.
 func (*Update) Descriptor() ([]byte, []int) {
-	return file_api_bridge_proto_rawDescGZIP(), []int{13}
+	return file_api_bridge_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Update) GetAction() Update_Action {
@@ -927,7 +1062,7 @@ type Address_Ip struct {
 
 func (x *Address_Ip) Reset() {
 	*x = Address_Ip{}
-	mi := &file_api_bridge_proto_msgTypes[14]
+	mi := &file_api_bridge_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -939,7 +1074,7 @@ func (x *Address_Ip) String() string {
 func (*Address_Ip) ProtoMessage() {}
 
 func (x *Address_Ip) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[14]
+	mi := &file_api_bridge_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -978,7 +1113,7 @@ type Address_Usb struct {
 
 func (x *Address_Usb) Reset() {
 	*x = Address_Usb{}
-	mi := &file_api_bridge_proto_msgTypes[15]
+	mi := &file_api_bridge_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -990,7 +1125,7 @@ func (x *Address_Usb) String() string {
 func (*Address_Usb) ProtoMessage() {}
 
 func (x *Address_Usb) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[15]
+	mi := &file_api_bridge_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1157,7 @@ type Address_I2C struct {
 
 func (x *Address_I2C) Reset() {
 	*x = Address_I2C{}
-	mi := &file_api_bridge_proto_msgTypes[16]
+	mi := &file_api_bridge_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1034,7 +1169,7 @@ func (x *Address_I2C) String() string {
 func (*Address_I2C) ProtoMessage() {}
 
 func (x *Address_I2C) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[16]
+	mi := &file_api_bridge_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +1201,7 @@ type Address_Bluetooth struct {
 
 func (x *Address_Bluetooth) Reset() {
 	*x = Address_Bluetooth{}
-	mi := &file_api_bridge_proto_msgTypes[17]
+	mi := &file_api_bridge_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1078,7 +1213,7 @@ func (x *Address_Bluetooth) String() string {
 func (*Address_Bluetooth) ProtoMessage() {}
 
 func (x *Address_Bluetooth) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[17]
+	mi := &file_api_bridge_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1248,7 @@ type Bridge_Config struct {
 
 func (x *Bridge_Config) Reset() {
 	*x = Bridge_Config{}
-	mi := &file_api_bridge_proto_msgTypes[18]
+	mi := &file_api_bridge_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1125,7 +1260,7 @@ func (x *Bridge_Config) String() string {
 func (*Bridge_Config) ProtoMessage() {}
 
 func (x *Bridge_Config) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[18]
+	mi := &file_api_bridge_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1315,7 @@ type Bridge_State struct {
 
 func (x *Bridge_State) Reset() {
 	*x = Bridge_State{}
-	mi := &file_api_bridge_proto_msgTypes[19]
+	mi := &file_api_bridge_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1192,7 +1327,7 @@ func (x *Bridge_State) String() string {
 func (*Bridge_State) ProtoMessage() {}
 
 func (x *Bridge_State) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[19]
+	mi := &file_api_bridge_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1373,7 @@ type Bridge_State_Zigbee struct {
 
 func (x *Bridge_State_Zigbee) Reset() {
 	*x = Bridge_State_Zigbee{}
-	mi := &file_api_bridge_proto_msgTypes[20]
+	mi := &file_api_bridge_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1250,7 +1385,7 @@ func (x *Bridge_State_Zigbee) String() string {
 func (*Bridge_State_Zigbee) ProtoMessage() {}
 
 func (x *Bridge_State_Zigbee) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[20]
+	mi := &file_api_bridge_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1418,7 @@ type Bridge_State_Zwave struct {
 
 func (x *Bridge_State_Zwave) Reset() {
 	*x = Bridge_State_Zwave{}
-	mi := &file_api_bridge_proto_msgTypes[21]
+	mi := &file_api_bridge_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1295,7 +1430,7 @@ func (x *Bridge_State_Zwave) String() string {
 func (*Bridge_State_Zwave) ProtoMessage() {}
 
 func (x *Bridge_State_Zwave) ProtoReflect() protoreflect.Message {
-	mi := &file_api_bridge_proto_msgTypes[21]
+	mi := &file_api_bridge_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1464,7 @@ var File_api_bridge_proto protoreflect.FileDescriptor
 
 const file_api_bridge_proto_rawDesc = "" +
 	"\n" +
-	"\x10api/bridge.proto\x12\x11faltung.house.api\x1a\x17google/rpc/status.proto\x1a\x19api/command/command.proto\x1a\x17api/device/device.proto\"\xf1\x02\n" +
+	"\x10api/bridge.proto\x12\x11faltung.house.api\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x19api/command/command.proto\x1a\x17api/device/device.proto\"\xf1\x02\n" +
 	"\aAddress\x12-\n" +
 	"\x02ip\x18\x01 \x01(\v2\x1d.faltung.house.api.Address.IpR\x02ip\x120\n" +
 	"\x03usb\x18\x02 \x01(\v2\x1e.faltung.house.api.Address.UsbR\x03usb\x120\n" +
@@ -1401,7 +1536,16 @@ const file_api_bridge_proto_rawDesc = "" +
 	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId\x12*\n" +
 	"\x06result\x18\n" +
 	" \x01(\v2\x12.google.rpc.StatusR\x06result\x12+\n" +
-	"\x11resulting_version\x18\v \x01(\tR\x10resultingVersion\"\x1d\n" +
+	"\x11resulting_version\x18\v \x01(\tR\x10resultingVersion\"\xbb\x01\n" +
+	"\x17GetDeviceHistoryRequest\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x120\n" +
+	"\x05since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x120\n" +
+	"\x05until\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12\x1f\n" +
+	"\vmax_samples\x18\x04 \x01(\x05R\n" +
+	"maxSamples\"}\n" +
+	"\rHistorySample\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12<\n" +
+	"\bsnapshot\x18\x02 \x01(\v2 .faltung.house.api.device.DeviceR\bsnapshot\"\x1d\n" +
 	"\x1bExecuteCommandAsyncResponse\"\x16\n" +
 	"\x14StreamUpdatesRequest\"\xcd\x03\n" +
 	"\x06Update\x128\n" +
@@ -1417,14 +1561,15 @@ const file_api_bridge_proto_rawDesc = "" +
 	"\x05ADDED\x10\x03\x12\v\n" +
 	"\aREMOVED\x10\x04\x12\f\n" +
 	"\bEXECUTED\x10\x05B\b\n" +
-	"\x06Update2\x9c\x05\n" +
+	"\x06Update2\x82\x06\n" +
 	"\rBridgeService\x12M\n" +
 	"\tGetBridge\x12#.faltung.house.api.GetBridgeRequest\x1a\x19.faltung.house.api.Bridge\"\x00\x12^\n" +
 	"\vListDevices\x12%.faltung.house.api.ListDevicesRequest\x1a&.faltung.house.api.ListDevicesResponse\"\x00\x12T\n" +
 	"\tGetDevice\x12#.faltung.house.api.GetDeviceRequest\x1a .faltung.house.api.device.Device\"\x00\x12f\n" +
 	"\x12UpdateDeviceConfig\x12,.faltung.house.api.UpdateDeviceConfigRequest\x1a .faltung.house.api.device.Device\"\x00\x12X\n" +
 	"\x0eExecuteCommand\x12\".faltung.house.api.command.Command\x1a .faltung.house.api.device.Device\"\x00\x12k\n" +
-	"\x13ExecuteCommandAsync\x12\".faltung.house.api.command.Command\x1a..faltung.house.api.ExecuteCommandAsyncResponse\"\x00\x12W\n" +
+	"\x13ExecuteCommandAsync\x12\".faltung.house.api.command.Command\x1a..faltung.house.api.ExecuteCommandAsyncResponse\"\x00\x12d\n" +
+	"\x10GetDeviceHistory\x12*.faltung.house.api.GetDeviceHistoryRequest\x1a .faltung.house.api.HistorySample\"\x000\x01\x12W\n" +
 	"\rStreamUpdates\x12'.faltung.house.api.StreamUpdatesRequest\x1a\x19.faltung.house.api.Update\"\x000\x01B!Z\x1fgithub.com/rmrobinson/house/apib\x06proto3"
 
 var (
@@ -1440,7 +1585,7 @@ func file_api_bridge_proto_rawDescGZIP() []byte {
 }
 
 var file_api_bridge_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_api_bridge_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_api_bridge_proto_goTypes = []any{
 	(Update_Action)(0),                  // 0: faltung.house.api.Update.Action
 	(*Address)(nil),                     // 1: faltung.house.api.Address
@@ -1454,63 +1599,72 @@ var file_api_bridge_proto_goTypes = []any{
 	(*DeviceUpdate)(nil),                // 9: faltung.house.api.DeviceUpdate
 	(*InitialUpdate)(nil),               // 10: faltung.house.api.InitialUpdate
 	(*CommandUpdate)(nil),               // 11: faltung.house.api.CommandUpdate
-	(*ExecuteCommandAsyncResponse)(nil), // 12: faltung.house.api.ExecuteCommandAsyncResponse
-	(*StreamUpdatesRequest)(nil),        // 13: faltung.house.api.StreamUpdatesRequest
-	(*Update)(nil),                      // 14: faltung.house.api.Update
-	(*Address_Ip)(nil),                  // 15: faltung.house.api.Address.Ip
-	(*Address_Usb)(nil),                 // 16: faltung.house.api.Address.Usb
-	(*Address_I2C)(nil),                 // 17: faltung.house.api.Address.I2c
-	(*Address_Bluetooth)(nil),           // 18: faltung.house.api.Address.Bluetooth
-	(*Bridge_Config)(nil),               // 19: faltung.house.api.Bridge.Config
-	(*Bridge_State)(nil),                // 20: faltung.house.api.Bridge.State
-	(*Bridge_State_Zigbee)(nil),         // 21: faltung.house.api.Bridge.State.Zigbee
-	(*Bridge_State_Zwave)(nil),          // 22: faltung.house.api.Bridge.State.Zwave
-	(*device.Device)(nil),               // 23: faltung.house.api.device.Device
-	(*device.Device_Config)(nil),        // 24: faltung.house.api.device.Device.Config
-	(*status.Status)(nil),               // 25: google.rpc.Status
-	(*command.Command)(nil),             // 26: faltung.house.api.command.Command
+	(*GetDeviceHistoryRequest)(nil),     // 12: faltung.house.api.GetDeviceHistoryRequest
+	(*HistorySample)(nil),               // 13: faltung.house.api.HistorySample
+	(*ExecuteCommandAsyncResponse)(nil), // 14: faltung.house.api.ExecuteCommandAsyncResponse
+	(*StreamUpdatesRequest)(nil),        // 15: faltung.house.api.StreamUpdatesRequest
+	(*Update)(nil),                      // 16: faltung.house.api.Update
+	(*Address_Ip)(nil),                  // 17: faltung.house.api.Address.Ip
+	(*Address_Usb)(nil),                 // 18: faltung.house.api.Address.Usb
+	(*Address_I2C)(nil),                 // 19: faltung.house.api.Address.I2c
+	(*Address_Bluetooth)(nil),           // 20: faltung.house.api.Address.Bluetooth
+	(*Bridge_Config)(nil),               // 21: faltung.house.api.Bridge.Config
+	(*Bridge_State)(nil),                // 22: faltung.house.api.Bridge.State
+	(*Bridge_State_Zigbee)(nil),         // 23: faltung.house.api.Bridge.State.Zigbee
+	(*Bridge_State_Zwave)(nil),          // 24: faltung.house.api.Bridge.State.Zwave
+	(*device.Device)(nil),               // 25: faltung.house.api.device.Device
+	(*device.Device_Config)(nil),        // 26: faltung.house.api.device.Device.Config
+	(*status.Status)(nil),               // 27: google.rpc.Status
+	(*timestamppb.Timestamp)(nil),       // 28: google.protobuf.Timestamp
+	(*command.Command)(nil),             // 29: faltung.house.api.command.Command
 }
 var file_api_bridge_proto_depIdxs = []int32{
-	15, // 0: faltung.house.api.Address.ip:type_name -> faltung.house.api.Address.Ip
-	16, // 1: faltung.house.api.Address.usb:type_name -> faltung.house.api.Address.Usb
-	17, // 2: faltung.house.api.Address.i2c:type_name -> faltung.house.api.Address.I2c
-	18, // 3: faltung.house.api.Address.bluetooth:type_name -> faltung.house.api.Address.Bluetooth
-	19, // 4: faltung.house.api.Bridge.config:type_name -> faltung.house.api.Bridge.Config
-	20, // 5: faltung.house.api.Bridge.state:type_name -> faltung.house.api.Bridge.State
-	23, // 6: faltung.house.api.ListDevicesResponse.devices:type_name -> faltung.house.api.device.Device
-	24, // 7: faltung.house.api.UpdateDeviceConfigRequest.config:type_name -> faltung.house.api.device.Device.Config
+	17, // 0: faltung.house.api.Address.ip:type_name -> faltung.house.api.Address.Ip
+	18, // 1: faltung.house.api.Address.usb:type_name -> faltung.house.api.Address.Usb
+	19, // 2: faltung.house.api.Address.i2c:type_name -> faltung.house.api.Address.I2c
+	20, // 3: faltung.house.api.Address.bluetooth:type_name -> faltung.house.api.Address.Bluetooth
+	21, // 4: faltung.house.api.Bridge.config:type_name -> faltung.house.api.Bridge.Config
+	22, // 5: faltung.house.api.Bridge.state:type_name -> faltung.house.api.Bridge.State
+	25, // 6: faltung.house.api.ListDevicesResponse.devices:type_name -> faltung.house.api.device.Device
+	26, // 7: faltung.house.api.UpdateDeviceConfigRequest.config:type_name -> faltung.house.api.device.Device.Config
 	2,  // 8: faltung.house.api.BridgeUpdate.bridge:type_name -> faltung.house.api.Bridge
-	23, // 9: faltung.house.api.DeviceUpdate.device:type_name -> faltung.house.api.device.Device
+	25, // 9: faltung.house.api.DeviceUpdate.device:type_name -> faltung.house.api.device.Device
 	2,  // 10: faltung.house.api.InitialUpdate.bridge:type_name -> faltung.house.api.Bridge
-	23, // 11: faltung.house.api.InitialUpdate.devices:type_name -> faltung.house.api.device.Device
-	25, // 12: faltung.house.api.CommandUpdate.result:type_name -> google.rpc.Status
-	0,  // 13: faltung.house.api.Update.action:type_name -> faltung.house.api.Update.Action
-	10, // 14: faltung.house.api.Update.initial_update:type_name -> faltung.house.api.InitialUpdate
-	8,  // 15: faltung.house.api.Update.bridge_update:type_name -> faltung.house.api.BridgeUpdate
-	9,  // 16: faltung.house.api.Update.device_update:type_name -> faltung.house.api.DeviceUpdate
-	11, // 17: faltung.house.api.Update.command_update:type_name -> faltung.house.api.CommandUpdate
-	1,  // 18: faltung.house.api.Bridge.Config.address:type_name -> faltung.house.api.Address
-	21, // 19: faltung.house.api.Bridge.State.zigbee:type_name -> faltung.house.api.Bridge.State.Zigbee
-	22, // 20: faltung.house.api.Bridge.State.zwave:type_name -> faltung.house.api.Bridge.State.Zwave
-	3,  // 21: faltung.house.api.BridgeService.GetBridge:input_type -> faltung.house.api.GetBridgeRequest
-	4,  // 22: faltung.house.api.BridgeService.ListDevices:input_type -> faltung.house.api.ListDevicesRequest
-	6,  // 23: faltung.house.api.BridgeService.GetDevice:input_type -> faltung.house.api.GetDeviceRequest
-	7,  // 24: faltung.house.api.BridgeService.UpdateDeviceConfig:input_type -> faltung.house.api.UpdateDeviceConfigRequest
-	26, // 25: faltung.house.api.BridgeService.ExecuteCommand:input_type -> faltung.house.api.command.Command
-	26, // 26: faltung.house.api.BridgeService.ExecuteCommandAsync:input_type -> faltung.house.api.command.Command
-	13, // 27: faltung.house.api.BridgeService.StreamUpdates:input_type -> faltung.house.api.StreamUpdatesRequest
-	2,  // 28: faltung.house.api.BridgeService.GetBridge:output_type -> faltung.house.api.Bridge
-	5,  // 29: faltung.house.api.BridgeService.ListDevices:output_type -> faltung.house.api.ListDevicesResponse
-	23, // 30: faltung.house.api.BridgeService.GetDevice:output_type -> faltung.house.api.device.Device
-	23, // 31: faltung.house.api.BridgeService.UpdateDeviceConfig:output_type -> faltung.house.api.device.Device
-	23, // 32: faltung.house.api.BridgeService.ExecuteCommand:output_type -> faltung.house.api.device.Device
-	12, // 33: faltung.house.api.BridgeService.ExecuteCommandAsync:output_type -> faltung.house.api.ExecuteCommandAsyncResponse
-	14, // 34: faltung.house.api.BridgeService.StreamUpdates:output_type -> faltung.house.api.Update
-	28, // [28:35] is the sub-list for method output_type
-	21, // [21:28] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	25, // 11: faltung.house.api.InitialUpdate.devices:type_name -> faltung.house.api.device.Device
+	27, // 12: faltung.house.api.CommandUpdate.result:type_name -> google.rpc.Status
+	28, // 13: faltung.house.api.GetDeviceHistoryRequest.since:type_name -> google.protobuf.Timestamp
+	28, // 14: faltung.house.api.GetDeviceHistoryRequest.until:type_name -> google.protobuf.Timestamp
+	28, // 15: faltung.house.api.HistorySample.time:type_name -> google.protobuf.Timestamp
+	25, // 16: faltung.house.api.HistorySample.snapshot:type_name -> faltung.house.api.device.Device
+	0,  // 17: faltung.house.api.Update.action:type_name -> faltung.house.api.Update.Action
+	10, // 18: faltung.house.api.Update.initial_update:type_name -> faltung.house.api.InitialUpdate
+	8,  // 19: faltung.house.api.Update.bridge_update:type_name -> faltung.house.api.BridgeUpdate
+	9,  // 20: faltung.house.api.Update.device_update:type_name -> faltung.house.api.DeviceUpdate
+	11, // 21: faltung.house.api.Update.command_update:type_name -> faltung.house.api.CommandUpdate
+	1,  // 22: faltung.house.api.Bridge.Config.address:type_name -> faltung.house.api.Address
+	23, // 23: faltung.house.api.Bridge.State.zigbee:type_name -> faltung.house.api.Bridge.State.Zigbee
+	24, // 24: faltung.house.api.Bridge.State.zwave:type_name -> faltung.house.api.Bridge.State.Zwave
+	3,  // 25: faltung.house.api.BridgeService.GetBridge:input_type -> faltung.house.api.GetBridgeRequest
+	4,  // 26: faltung.house.api.BridgeService.ListDevices:input_type -> faltung.house.api.ListDevicesRequest
+	6,  // 27: faltung.house.api.BridgeService.GetDevice:input_type -> faltung.house.api.GetDeviceRequest
+	7,  // 28: faltung.house.api.BridgeService.UpdateDeviceConfig:input_type -> faltung.house.api.UpdateDeviceConfigRequest
+	29, // 29: faltung.house.api.BridgeService.ExecuteCommand:input_type -> faltung.house.api.command.Command
+	29, // 30: faltung.house.api.BridgeService.ExecuteCommandAsync:input_type -> faltung.house.api.command.Command
+	12, // 31: faltung.house.api.BridgeService.GetDeviceHistory:input_type -> faltung.house.api.GetDeviceHistoryRequest
+	15, // 32: faltung.house.api.BridgeService.StreamUpdates:input_type -> faltung.house.api.StreamUpdatesRequest
+	2,  // 33: faltung.house.api.BridgeService.GetBridge:output_type -> faltung.house.api.Bridge
+	5,  // 34: faltung.house.api.BridgeService.ListDevices:output_type -> faltung.house.api.ListDevicesResponse
+	25, // 35: faltung.house.api.BridgeService.GetDevice:output_type -> faltung.house.api.device.Device
+	25, // 36: faltung.house.api.BridgeService.UpdateDeviceConfig:output_type -> faltung.house.api.device.Device
+	25, // 37: faltung.house.api.BridgeService.ExecuteCommand:output_type -> faltung.house.api.device.Device
+	14, // 38: faltung.house.api.BridgeService.ExecuteCommandAsync:output_type -> faltung.house.api.ExecuteCommandAsyncResponse
+	13, // 39: faltung.house.api.BridgeService.GetDeviceHistory:output_type -> faltung.house.api.HistorySample
+	16, // 40: faltung.house.api.BridgeService.StreamUpdates:output_type -> faltung.house.api.Update
+	33, // [33:41] is the sub-list for method output_type
+	25, // [25:33] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_api_bridge_proto_init() }
@@ -1519,7 +1673,7 @@ func file_api_bridge_proto_init() {
 		return
 	}
 	file_api_bridge_proto_msgTypes[1].OneofWrappers = []any{}
-	file_api_bridge_proto_msgTypes[13].OneofWrappers = []any{
+	file_api_bridge_proto_msgTypes[15].OneofWrappers = []any{
 		(*Update_InitialUpdate)(nil),
 		(*Update_BridgeUpdate)(nil),
 		(*Update_DeviceUpdate)(nil),
@@ -1531,7 +1685,7 @@ func file_api_bridge_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_bridge_proto_rawDesc), len(file_api_bridge_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   22,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
