@@ -121,10 +121,12 @@ func (a *API) Status(w http.ResponseWriter, r *http.Request) {
 					ID:          output.ID,
 					Name:        output.Name,
 					Description: output.Description,
+					Volume:      output.Volume,
 					Muted:       output.Muted,
 					Active:      output.Active,
 				})
 			}
+			resp.Audio.DefaultOutputID = a.mpsc.GetDefaultAudioOutputID()
 		}
 
 		if a.mpc != nil {
