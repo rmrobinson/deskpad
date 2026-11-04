@@ -1,0 +1,18 @@
+[Unit]
+Description=DeskPad remote Stream Deck surface
+Documentation=https://github.com/rmrobinson/deskpad
+
+[Service]
+Type=simple
+# DESKPAD_SERVER (the daemon's web address) and DESKPAD_TOKEN (its web.auth-token) come from an env file kept out
+# of this tracked unit and out of the process list. See surface.env.example.
+EnvironmentFile=%h/.deskpad/surface.env
+ExecStart=%h/.local/bin/deskpad-surface
+# The program exits if the Stream Deck stops accepting writes (e.g. it was unplugged), so restart it to re-open
+# the device. It handles the daemon being unreachable itself, by retrying with backoff.
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

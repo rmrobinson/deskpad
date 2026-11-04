@@ -99,6 +99,12 @@ needs the target's `libudev` headers and doesn't cross-compile cleanly; `deploy/
 `local` control needs a Spotify Connect receiver on the machine. [deploy/spotifyd](deploy/spotifyd/README.md) has the
 steps to build it as a `.deb`, install it with apt, log in, and run it as a user service.
 
+## Remote Stream Deck
+
+The Stream Deck does not have to be plugged into the machine running `deskpadd`. `cmd/deskpad-surface` runs on a
+small host next to the Stream Deck (a Raspberry Pi, say), paints the daemon's keys over its HTTP API and sends key
+presses back. The daemon and all its integrations stay where they are. See [deploy/surface](deploy/surface/README.md).
+
 ## Build and test
 
 ```sh

@@ -1,0 +1,4 @@
+# Lets members of "plugdev" use an Elgato Stream Deck (original, 15 key, v2) without root.
+# Install as /etc/udev/rules.d/99-streamdeck.rules, then: sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="006d", MODE="0664", GROUP="plugdev"
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", ATTRS{idProduct}=="006d", MODE="0664", GROUP="plugdev"
