@@ -77,6 +77,21 @@ func (hs *Home) RegisterScreen(s deskpad.Screen) {
 			return
 		}
 	}
+	log.Printf("home: no free slot to register screen %q; it will not be reachable from home\n", s.Name())
+}
+
+// Screens returns the navigable screens registered via RegisterScreen, in
+// registration order. It excludes Home's own clock/temperature display
+// slots, which are display modes rather than independently navigable
+// screens.
+func (hs *Home) Screens() []deskpad.Screen {
+	out := make([]deskpad.Screen, 0, len(hs.screens))
+	for _, s := range hs.screens {
+		if s != nil && s != hs {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // KeyPressed handles the logic of what to do when a given key is pressed.

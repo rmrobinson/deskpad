@@ -7,20 +7,31 @@ import (
 
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
+	xfont "golang.org/x/image/font"
 )
 
 const (
-	fontSize     = 16
-	charWidth    = 6 // currently based on the font size
-	rowCharCount = 12
+	fontSize = 14
+	// rowCharCount only decides how many characters go on each row (a
+	// fixed-width split, not true word-wrap) - actual horizontal centering
+	// uses glyphFace's real measured width instead, since this font isn't
+	// monospace and a char-count estimate left short strings looking
+	// left-aligned rather than centred.
+	rowCharCount = 13
 	width        = 72
 	height       = width
 )
 
-var font *truetype.Font
+var (
+	font      *truetype.Font
+	glyphFace xfont.Face
+)
 
 func init() {
 	font = loadAssetFont("assets/m5x7.ttf")
+	if font != nil {
+		glyphFace = truetype.NewFace(font, &truetype.Options{Size: fontSize, DPI: 72})
+	}
 }
 
 // NewTextIcon creates a new image from the supplied string which can be rendered onto a button in a legible fashion.
@@ -104,10 +115,20 @@ func NewTextIconWithBackground(input string, bg image.Image) image.Image {
 	return bg
 }
 
+// getStartPoint returns the x pixel to start drawing input at so it's
+// horizontally centred, based on its actual rendered width rather than a
+// per-character estimate (this font isn't monospace - "i" and "W" don't
+// take the same width, so a char-count guess left longer strings looking
+// left-aligned instead of centred).
 func getStartPoint(input string) int {
-	if len(input) >= rowCharCount {
+	if glyphFace == nil {
 		return 1
 	}
 
-	return width/2 - len(input)/2*charWidth
+	textWidth := xfont.MeasureString(glyphFace, input).Round()
+	start := (width - textWidth) / 2
+	if start < 1 {
+		start = 1
+	}
+	return start
 }

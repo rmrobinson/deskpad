@@ -44,8 +44,8 @@ type MediaPlayer struct {
 type MediaPlayerController interface {
 	Play()
 	Pause()
-	Next()
-	Previous()
+	Next() error
+	Previous() error
 	FastForward()
 	Rewind()
 	VolumeUp()
@@ -133,15 +133,15 @@ func (mps *MediaPlayer) KeyPressed(ctx context.Context, id int, t deskpad.KeyPre
 	}
 
 	if id == mediaPlayerPrevKeyID {
-		mps.controller.Previous()
+		err := mps.controller.Previous()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
-		}, nil
+		}, err
 	} else if id == mediaPlayerNextKeyID {
-		mps.controller.Next()
+		err := mps.controller.Next()
 		return deskpad.KeyPressAction{
 			Action: deskpad.KeyPressActionNoop,
-		}, nil
+		}, err
 	} else if id == mediaPlayerShuffleLoopKeyID {
 		if mps.controller.IsShuffle() {
 			mps.controller.Shuffle(false)

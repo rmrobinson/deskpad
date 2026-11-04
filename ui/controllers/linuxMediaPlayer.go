@@ -15,7 +15,7 @@ import (
 	"github.com/rmrobinson/go-mpris"
 )
 
-const linuxMediaPlayerVolumeStep = 0.05
+const linuxMediaPlayerVolumeStepPct = 5
 
 // linuxMediaPlayerSeekStepMicros is how far fast-forward and rewind move, in the microseconds MPRIS uses.
 const linuxMediaPlayerSeekStepMicros = int64(10 * time.Second / time.Microsecond)
@@ -108,24 +108,31 @@ func (m *LinuxMediaPlayer) Pause() {
 	m.command("Pause")
 }
 
-func (m *LinuxMediaPlayer) Next() {
-	m.command("Next")
+// Next skips to the next track. Unlike Play/Pause, the outcome is reported:
+// Bridge.apply surfaces it as the result of a SkipForward command, so a
+// caller can tell a skip that had no player to act on apart from one that
+// succeeded.
+func (m *LinuxMediaPlayer) Next() error {
+	return m.command("Next")
 }
 
-func (m *LinuxMediaPlayer) Previous() {
-	m.command("Previous")
+// Previous returns to the previous track. See Next's doc comment.
+func (m *LinuxMediaPlayer) Previous() error {
+	return m.command("Previous")
 }
 
-func (m *LinuxMediaPlayer) command(method string) {
+func (m *LinuxMediaPlayer) command(method string) error {
 	name, ok := m.currentPlayerName()
 	if !ok {
-		return
+		return errors.New("no MPRIS media player available")
 	}
 
 	log.Printf("mpris %s: %s\n", name, method)
 	if err := m.callPlayer(name, method); err != nil {
 		log.Printf("mpris %s: %s failed: %s\n", name, method, err.Error())
+		return fmt.Errorf("mpris %s: %w", method, err)
 	}
+	return nil
 }
 
 func (m *LinuxMediaPlayer) FastForward() {
@@ -151,31 +158,33 @@ func (m *LinuxMediaPlayer) seek(what string, offsetMicros int64) {
 }
 
 func (m *LinuxMediaPlayer) VolumeUp() {
-	v, err := m.paClient.Volume()
-	if err != nil {
-		log.Printf("error getting volume: %s\n", err.Error())
-		return
-	}
-
-	v += linuxMediaPlayerVolumeStep
-	if v > 1.0 {
-		v = 1.0
-	}
-	m.paClient.SetVolume(v)
+	m.SetVolume(m.GetVolume() + linuxMediaPlayerVolumeStepPct)
 }
 
 func (m *LinuxMediaPlayer) VolumeDown() {
+	m.SetVolume(m.GetVolume() - linuxMediaPlayerVolumeStepPct)
+}
+
+// GetVolume returns the current PulseAudio volume as a 0-100 percentage.
+// Returns 0 if the level can't be read.
+func (m *LinuxMediaPlayer) GetVolume() int {
 	v, err := m.paClient.Volume()
 	if err != nil {
 		log.Printf("error getting volume: %s\n", err.Error())
-		return
+		return 0
 	}
 
-	v -= linuxMediaPlayerVolumeStep
-	if v < 0 {
-		v = 0
+	return int(v*100 + 0.5)
+}
+
+// SetVolume sets the PulseAudio volume to pct, a 0-100 percentage (clamped).
+func (m *LinuxMediaPlayer) SetVolume(pct int) {
+	if pct < 0 {
+		pct = 0
+	} else if pct > 100 {
+		pct = 100
 	}
-	m.paClient.SetVolume(v)
+	m.paClient.SetVolume(float32(pct) / 100)
 }
 
 func (m *LinuxMediaPlayer) Mute() {

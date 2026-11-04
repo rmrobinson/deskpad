@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,13 +20,23 @@ import (
 	"github.com/rmrobinson/deskpad/ui"
 	"github.com/rmrobinson/deskpad/ui/controllers"
 	"github.com/rmrobinson/deskpad/ui/screens"
+	houseapi "github.com/rmrobinson/house/api"
 	"github.com/rmrobinson/timebox"
 	tbbt "github.com/rmrobinson/timebox/bluetooth"
 	weatherv1 "github.com/rmrobinson/weather-server/proto/weather/v1"
 	"github.com/spf13/viper"
 	"github.com/zmb3/spotify/v2"
 	"golang.org/x/oauth2"
+	"google.golang.org/grpc"
 )
+
+// houseRoomConfig is one entry of the house.rooms config list: the room to
+// display and (optionally) the label to show for it, since the house
+// service's Room.Config.name isn't fetched until the controller connects.
+type houseRoomConfig struct {
+	RoomID string `mapstructure:"room-id"`
+	Label  string `mapstructure:"label"`
+}
 
 func configureSpotifyClient(ctx context.Context, tokenFilePath string) *spotify.Client {
 	tokenFile, err := os.ReadFile(tokenFilePath)
@@ -272,6 +283,7 @@ func main() {
 	var linuxMpc *controllers.LinuxMediaPlayer
 	var spotifyMpc *controllers.SpotifyMediaPlayer
 	var apiMPC MediaPlayerController
+	var bridgeMPC controllers.BridgeMediaPlayerController
 	var playlistPlaybackController controllers.PlaylistPlaybackController
 
 	if playback.Control == playbackControlLocal {
@@ -287,12 +299,14 @@ func main() {
 		linuxMpc = controllers.NewLinuxMediaPlayer(mprisConn, pulseAudioClient, opts...)
 		mps = screens.NewMediaPlayer(hs, linuxMpc)
 		apiMPC = linuxMpc
+		bridgeMPC = linuxMpc
 		playlistPlaybackController = linuxMpc
 	} else {
 		log.Printf("*** Playback: Spotify control\n")
 		spotifyMpc = controllers.NewSpotifyMediaPlayer(ctx, spotifyClient)
 		mps = screens.NewMediaPlayer(hs, spotifyMpc)
 		apiMPC = spotifyMpc
+		bridgeMPC = spotifyMpc
 		playlistPlaybackController = spotifyMpc
 	}
 
@@ -336,6 +350,49 @@ func main() {
 	bs.RefreshDevices(ctx)
 	_ = screens.NewBluetoothSetting(hs, bs)
 
+	// Set up house device control, if configured. Each configured room gets
+	// its own device-list/device-control screen pair and its own connection,
+	// kept open only while one of those two screens is active (see
+	// controllers.House.Start/Stop).
+	if viper.IsSet("house.addr") {
+		var houseRooms []houseRoomConfig
+		if err := viper.UnmarshalKey("house.rooms", &houseRooms); err != nil {
+			log.Printf("unable to retrieve house rooms: %s\n", err.Error())
+		}
+
+		for _, room := range houseRooms {
+			if room.RoomID == "" {
+				continue
+			}
+
+			hc, err := controllers.NewHouse(
+				ctx,
+				viper.GetString("house.addr"),
+				viper.GetBool("house.use-tls"),
+				viper.GetString("house.ca-cert"),
+				viper.GetString("house.cert-file"),
+				viper.GetString("house.key-file"),
+				viper.GetString("house.server-name"),
+				room.RoomID,
+			)
+			if err != nil {
+				log.Printf("unable to set up house room %s: %s\n", room.RoomID, err.Error())
+				continue
+			}
+
+			label := room.Label
+			if label == "" {
+				label = room.RoomID
+			}
+
+			hdl := screens.NewHouseDeviceList(hs, label, hc)
+			hdc := screens.NewHouseDeviceControl(hdl, hc)
+			hdl.SetControlScreen(hdc)
+		}
+	} else {
+		log.Printf("no house address provided, will not display house device screens\n")
+	}
+
 	d := deskpad.NewDeck(hs)
 	var streamDeckSurface *deskpad.StreamDeckSurface
 	if sd != nil {
@@ -349,6 +406,57 @@ func main() {
 
 	if streamDeckSurface != nil {
 		go streamDeckSurface.Run(ctx, d)
+	}
+
+	// Expose this DeskPad instance itself as a house bridge: its media
+	// playback, volume, and screen selection become one house MediaPlayer
+	// device that a house aggregator can dial into. This is the server side
+	// of the house protocol - the House controller(s) set up above are the
+	// client side, talking to other bridges. The two are deliberately
+	// separate roles for now; fully decoupling DeskPad's own model from
+	// "house client" vs "house server" is a larger, unrelated effort.
+	if addr := viper.GetString("bridge.addr"); addr != "" {
+		deviceID := viper.GetString("bridge.device-id")
+		if deviceID == "" {
+			if hostname, err := os.Hostname(); err == nil {
+				deviceID = hostname
+			} else {
+				deviceID = "deskpad"
+			}
+		}
+		deviceName := viper.GetString("bridge.device-name")
+		if deviceName == "" {
+			deviceName = deviceID
+		}
+
+		apps := append([]deskpad.Screen{hs}, hs.Screens()...)
+		br := controllers.NewBridge(deviceID, deviceName, d, apps, bridgeMPC)
+
+		srvOpts, err := bridgeServerOptions()
+		if err != nil {
+			log.Fatalf("unable to configure bridge server: %s\n", err.Error())
+		}
+
+		lis, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("unable to listen for bridge service on %s: %s\n", addr, err.Error())
+		}
+
+		grpcServer := grpc.NewServer(srvOpts...)
+		houseapi.RegisterBridgeServiceServer(grpcServer, br)
+
+		log.Printf("starting house bridge service on %s as device %q\n", addr, deviceID)
+		go func() {
+			if err := grpcServer.Serve(lis); err != nil {
+				log.Printf("house bridge service stopped: %s\n", err.Error())
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			grpcServer.GracefulStop()
+		}()
+	} else {
+		log.Printf("no bridge address provided, will not expose this DeskPad instance as a house bridge\n")
 	}
 
 	// Set up the API
