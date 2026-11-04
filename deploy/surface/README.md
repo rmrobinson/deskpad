@@ -19,8 +19,11 @@ On the machine running deskpadd:
 
 - `web.addr` must be reachable from the Pi (the default `:1337` listens on all interfaces; check any firewall).
 - `web.auth-token` must be set, or key presses are refused.
-- If the Stream Deck has moved off that machine, set `use-streamdeck: false` there. Leave it `true` to have both
-  working; they are independent surfaces of the same screens.
+- If the Stream Deck has moved off that machine, set `use-streamdeck: false` there and restart deskpadd. With it
+  left `true` the daemon exits at startup when no Stream Deck is attached (it cannot continue without the
+  hardware), so it would crash-loop on its next restart. Leave it `true` only while a deck is still plugged into
+  that machine; the two are independent surfaces of the same screens, but a single deck can only be opened by one
+  program at a time.
 
 The traffic is plain HTTP and the token travels in a header, so keep it on a trusted LAN or put TLS in front
 (`DESKPAD_SERVER` accepts `https://`). The program logs a warning at startup when it will send the token over
@@ -32,14 +35,28 @@ The Stream Deck's HID library is CGO and needs `libudev` headers for the machine
 rather than cross-compiling:
 
 ```sh
-sudo apt install golang-go libudev-dev git
+sudo apt install libudev-dev pkg-config gcc git
 git clone https://github.com/rmrobinson/deskpad && cd deskpad
-make build-surface          # bin/deskpad-surface
+go build -o bin/deskpad-surface ./cmd/deskpad-surface    # or: make build-surface, if make is installed
 ```
 
 The Go toolchain must be new enough to read this module's `go.mod`. A distribution Go that is 1.21 or later will
-download the exact toolchain it asks for; an older one (Raspberry Pi OS based on Debian 12 ships 1.19) cannot, so
-use a newer distribution or install Go from [go.dev](https://go.dev/dl/).
+download the exact toolchain it asks for; an older one cannot. Raspberry Pi OS based on Debian 12 ships 1.19, so
+there install Go from [go.dev](https://go.dev/dl/) (pick the `linux-armv6l` tarball on a Pi 1 or Zero, `armv7l` or
+`arm64` otherwise, and check it against the checksum on that page), unpack it to `/usr/local`, and put
+`/usr/local/go/bin` on your `PATH`. That copy is not managed by apt, so upgrading it is manual.
+
+### Older Pis
+
+A Raspberry Pi 1 (`armv6l`, one 700 MHz core, 512 MB) works, with these costs:
+
+- It needs the 32-bit Raspberry Pi OS. Stock Debian or Ubuntu `armhf` images are ARMv7 and will not boot on it.
+- The first build takes around 40 minutes, almost all of it compiling the Go standard library. Later builds reuse
+  the cache and are much quicker.
+- Redrawing is noticeably slower. Measured on a Pi 1B, a key takes about 36 ms to draw: roughly 4 ms to decode the
+  daemon's PNG, 20 ms for the Stream Deck library to rotate and JPEG-encode it, and 12 ms of USB transfer. A
+  screen change that touches every key takes about half a second; updating one key is quick. A Zero 2 W or Pi 3
+  removes most of this without any change here.
 
 ## Install (on the Pi)
 
